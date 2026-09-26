@@ -20,21 +20,27 @@ import (
 var errTakenOver = errors.New("another controller took over; save settings to reconnect")
 
 type Status struct {
-	SinkMuted       bool      `json:"sink_muted"`
-	SinkVolume      float64   `json:"sink_volume_percent"`
-	PlaybackSeconds float64   `json:"playback_seconds"`
-	State           string    `json:"state"`
-	Message         string    `json:"message"`
-	Sink            string    `json:"sink"`
-	Device          string    `json:"device"`
-	PlayerState     string    `json:"player_state"`
-	ReceiverVolume  float64   `json:"receiver_volume"`
-	ReceiverMuted   bool      `json:"receiver_muted"`
-	EncodedBytes    uint64    `json:"encoded_bytes"`
-	MediaRequests   uint64    `json:"media_requests"`
-	Subscribers     int       `json:"subscribers"`
-	Peak            float64   `json:"peak"`
-	Updated         time.Time `json:"updated"`
+	RequestedDelayMS  int       `json:"requested_delay_ms"`
+	ReceiverDelayMS   int       `json:"receiver_delay_ms"`
+	AudioFrames       uint64    `json:"audio_frames"`
+	AcknowledgedFrame int64     `json:"acknowledged_frame"`
+	Retransmits       uint64    `json:"retransmits"`
+	FeedbackReports   uint64    `json:"feedback_reports"`
+	SinkMuted         bool      `json:"sink_muted"`
+	SinkVolume        float64   `json:"sink_volume_percent"`
+	PlaybackSeconds   float64   `json:"playback_seconds"`
+	State             string    `json:"state"`
+	Message           string    `json:"message"`
+	Sink              string    `json:"sink"`
+	Device            string    `json:"device"`
+	PlayerState       string    `json:"player_state"`
+	ReceiverVolume    float64   `json:"receiver_volume"`
+	ReceiverMuted     bool      `json:"receiver_muted"`
+	EncodedBytes      uint64    `json:"encoded_bytes"`
+	MediaRequests     uint64    `json:"media_requests"`
+	Subscribers       int       `json:"subscribers"`
+	Peak              float64   `json:"peak"`
+	Updated           time.Time `json:"updated"`
 }
 
 type Service struct {
@@ -43,11 +49,12 @@ type Service struct {
 	path          string
 	status        Status
 	changed       chan struct{}
+	liveChanged   chan struct{}
 	sessionCancel context.CancelFunc
 }
 
 func New(c config.Config, path string) *Service {
-	return &Service{config: c, path: path, changed: make(chan struct{}, 1), status: Status{State: "starting", Sink: audio.SinkName, ReceiverMuted: true}}
+	return &Service{config: c, path: path, changed: make(chan struct{}, 1), liveChanged: make(chan struct{}, 1), status: Status{State: "starting", Sink: audio.SinkName, ReceiverMuted: true}}
 }
 func (s *Service) Config() config.Config { s.mu.Lock(); defer s.mu.Unlock(); return s.config }
 func (s *Service) Status() Status        { s.mu.Lock(); defer s.mu.Unlock(); return s.status }
@@ -60,17 +67,26 @@ func (s *Service) Update(c config.Config) error {
 	if err := config.Save(s.path, c); err != nil {
 		return err
 	}
+
+	restart := s.config.RestartRequired(c) || (s.status.State == "idle" && c.Enabled && (c.Host != "" || c.DeviceID != ""))
 	s.config = c
-	s.status.State = "reconfiguring"
-	s.status.PlayerState = ""
-	s.status.Message = "Applying device settings."
-	s.status.Updated = time.Now()
-	if s.sessionCancel != nil {
-		s.sessionCancel()
-	}
-	select {
-	case s.changed <- struct{}{}:
-	default:
+	if restart {
+		s.status.State = "reconfiguring"
+		s.status.PlayerState = ""
+		s.status.Message = "Applying stream settings."
+		s.status.Updated = time.Now()
+		if s.sessionCancel != nil {
+			s.sessionCancel()
+		}
+		select {
+		case s.changed <- struct{}{}:
+		default:
+		}
+	} else {
+		select {
+		case s.liveChanged <- struct{}{}:
+		default:
+		}
 	}
 	return nil
 }
@@ -164,6 +180,7 @@ func (s *Service) wait(ctx context.Context, d time.Duration) bool {
 	}
 }
 func (s *Service) session(ctx context.Context, c config.Config) error {
+	streamConfig := c
 	s.state("connecting", "Connecting muted; verifying the configured receiver volume.")
 	if c.DeviceID != "" {
 		scanCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -191,7 +208,7 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 	if err = client.SetVolume(ctx, c.ReceiverVolume, true); err != nil {
 		return fmt.Errorf("verify muted receiver: %w", err)
 	}
-	app, err := client.Launch(ctx)
+	app, err := client.Launch(ctx, c.Codec == "cast-opus")
 	if err != nil {
 		return err
 	}
@@ -209,16 +226,28 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 	if err = client.SetVolume(ctx, c.ReceiverVolume, true); err != nil {
 		return fmt.Errorf("verify volume after launch: %w", err)
 	}
-	stream, err := audio.NewStream(ctx, c, client.LocalIP(), client.RemoteIP())
+
+	var stream *audio.Stream
+	if c.Codec == "cast-opus" {
+		session, negotiateErr := client.NegotiateAudio(ctx, app, c.Bitrate, c.TargetDelayMS)
+		if negotiateErr != nil {
+			return negotiateErr
+		}
+		stream, err = audio.NewRealtime(ctx, c, client.LocalIP(), client.RemoteIP(), session)
+	} else {
+		stream, err = audio.NewStream(ctx, c, client.LocalIP(), client.RemoteIP())
+	}
 	if err != nil {
 		return err
 	}
 	defer stream.Close()
-	if err = stream.WaitReady(ctx); err != nil {
-		return err
-	}
-	if err = client.Load(ctx, app, stream.URL, stream.ContentType); err != nil {
-		return fmt.Errorf("load audio: %w", err)
+	if c.Codec != "cast-opus" {
+		if err = stream.WaitReady(ctx); err != nil {
+			return err
+		}
+		if err = client.Load(ctx, app, stream.URL, stream.ContentType); err != nil {
+			return fmt.Errorf("load audio: %w", err)
+		}
 	}
 	watchCtx, stopWatch := context.WithCancel(ctx)
 	defer stopWatch()
@@ -229,6 +258,12 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 	native, err := audio.ReadSink(ctx)
 	if err != nil {
 		return err
+	}
+	latest := s.Config()
+	if !streamConfig.RestartRequired(latest) {
+		c.ReceiverVolume = latest.ReceiverVolume
+		c.TrimDB = latest.TrimDB
+		stream.SetTrimDB(c.TrimDB)
 	}
 	if err = client.SetVolume(ctx, c.ReceiverVolume, native.Muted); err != nil {
 		return fmt.Errorf("verify playback volume: %w", err)
@@ -244,6 +279,21 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 			return ctx.Err()
 		case err := <-stream.Done:
 			return fmt.Errorf("audio pipeline: %w", err)
+
+		case <-s.liveChanged:
+			next := s.Config()
+			if streamConfig.RestartRequired(next) {
+				continue
+			}
+			if next.ReceiverVolume != c.ReceiverVolume {
+				// Keep the encoder and transport running while changing receiver gain.
+				if err = client.SetLiveVolume(ctx, next.ReceiverVolume, native.Muted); err != nil {
+					stream.Allowed.Store(false)
+					return fmt.Errorf("apply receiver volume: %w", err)
+				}
+			}
+			stream.SetTrimDB(next.TrimDB)
+			c = next
 		case next, ok := <-states:
 			if !ok {
 				return errors.New("desktop audio connection closed")
@@ -290,9 +340,17 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 				native.Muted = rs.Volume.Muted
 				stream.Allowed.Store(!native.Muted)
 			}
-			ms, err := client.Media(ctx, app)
-			if err != nil {
-				return err
+			ms := cast.MediaStatus{PlayerState: "CONNECTING"}
+			stats := stream.RealtimeStats()
+			if c.Codec == "cast-opus" {
+				if stats.Feedback > 0 {
+					ms.PlayerState = "TRANSMITTING"
+				}
+			} else {
+				ms, err = client.Media(ctx, app)
+				if err != nil {
+					return err
+				}
 			}
 			if ms.Media.ContentID != "" && ms.Media.ContentID != stream.URL {
 				stream.Allowed.Store(false)
@@ -300,7 +358,7 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 				return errTakenOver
 			}
 			s.mu.Lock()
-			s.status = Status{SinkMuted: native.Muted, SinkVolume: native.VolumePercent(), PlaybackSeconds: ms.CurrentTime, State: "streaming", Message: "Select Shoutout in KDE. Receiver latency has not been measured.", Sink: audio.SinkName, Device: c.DeviceName, PlayerState: ms.PlayerState, ReceiverVolume: rs.Volume.Level, ReceiverMuted: rs.Volume.Muted, EncodedBytes: stream.Bytes.Load(), MediaRequests: stream.Requests.Load(), Subscribers: stream.Subscribers(), Peak: math.Float64frombits(stream.Peak.Load()), Updated: time.Now()}
+			s.status = Status{RequestedDelayMS: c.TargetDelayMS, ReceiverDelayMS: stats.ReceiverDelayMS, AudioFrames: stats.Frames, AcknowledgedFrame: stats.Acknowledged, Retransmits: stats.Retransmits, FeedbackReports: stats.Feedback, SinkMuted: native.Muted, SinkVolume: native.VolumePercent(), PlaybackSeconds: ms.CurrentTime, State: "streaming", Message: "Select Shoutout in KDE. Receiver latency has not been measured.", Sink: audio.SinkName, Device: c.DeviceName, PlayerState: ms.PlayerState, ReceiverVolume: rs.Volume.Level, ReceiverMuted: rs.Volume.Muted, EncodedBytes: stream.Bytes.Load(), MediaRequests: stream.Requests.Load(), Subscribers: stream.Subscribers(), Peak: math.Float64frombits(stream.Peak.Load()), Updated: time.Now()}
 			s.mu.Unlock()
 			if ms.PlayerState == "IDLE" {
 				return fmt.Errorf("receiver stopped audio: %s", ms.IdleReason)

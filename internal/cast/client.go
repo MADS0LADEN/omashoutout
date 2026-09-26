@@ -19,6 +19,7 @@ const (
 	receiverNS   = "urn:x-cast:com.google.cast.receiver"
 	connectionNS = "urn:x-cast:com.google.cast.tp.connection"
 	heartbeatNS  = "urn:x-cast:com.google.cast.tp.heartbeat"
+	streamingNS  = "urn:x-cast:com.google.cast.webrtc"
 	mediaNS      = "urn:x-cast:com.google.cast.media"
 	receiver     = "receiver-0"
 	sender       = "shoutout-0"
@@ -49,6 +50,8 @@ type MediaStatus struct {
 	IdleReason     string  `json:"idleReason"`
 }
 type response struct {
+	SeqNum    int             `json:"seqNum"`
+	Raw       json.RawMessage `json:"-"`
 	Type      string          `json:"type"`
 	RequestID int             `json:"requestId"`
 	Status    json.RawMessage `json:"status"`
@@ -146,6 +149,10 @@ func (c *Client) readLoop() {
 				return
 			}
 		}
+		r.Raw = e.Payload
+		if e.Namespace == streamingNS {
+			r.RequestID = r.SeqNum
+		}
 		c.mu.Lock()
 		ch := c.pending[r.RequestID]
 		c.mu.Unlock()
@@ -181,29 +188,39 @@ func (c *Client) request(ctx context.Context, destination, namespace string, p m
 	c.pending[id] = ch
 	c.mu.Unlock()
 	defer func() { c.mu.Lock(); delete(c.pending, id); c.mu.Unlock() }()
-	p["requestId"] = id
+	if namespace == streamingNS {
+		p["seqNum"] = id
+	} else {
+		p["requestId"] = id
+	}
 	if err := c.send(destination, namespace, p); err != nil {
 		return response{}, err
 	}
 	timer := time.NewTimer(12 * time.Second)
 	defer timer.Stop()
+
+	var r response
 	select {
-	case r := <-ch:
-		switch r.Type {
-		case "INVALID_REQUEST", "LOAD_FAILED", "LAUNCH_ERROR", "LOAD_CANCELLED":
-			return r, fmt.Errorf("receiver %s: %s", r.Type, r.Reason)
-		}
-		return r, nil
+	case r = <-ch:
 	case <-ctx.Done():
 		return response{}, ctx.Err()
 	case <-c.done:
-		c.mu.Lock()
-		err := c.readErr
-		c.mu.Unlock()
-		return response{}, err
+		select {
+		case r = <-ch:
+		default:
+			c.mu.Lock()
+			err := c.readErr
+			c.mu.Unlock()
+			return response{}, err
+		}
 	case <-timer.C:
 		return response{}, errors.New("Cast response timed out")
 	}
+	switch r.Type {
+	case "INVALID_REQUEST", "LOAD_FAILED", "LAUNCH_ERROR", "LOAD_CANCELLED":
+		return r, fmt.Errorf("receiver %s: %s", r.Type, r.Reason)
+	}
+	return r, nil
 }
 func (c *Client) Status(ctx context.Context) (ReceiverStatus, error) {
 	r, err := c.request(ctx, receiver, receiverNS, map[string]any{"type": "GET_STATUS"})
@@ -256,8 +273,12 @@ func (c *Client) SetVolume(ctx context.Context, level float64, muted bool) error
 	}
 	return nil
 }
-func (c *Client) Launch(ctx context.Context) (Application, error) {
-	r, err := c.request(ctx, receiver, receiverNS, map[string]any{"type": "LAUNCH", "appId": appID})
+func (c *Client) Launch(ctx context.Context, realtime bool) (Application, error) {
+	id := appID
+	if realtime {
+		id = "85CDB22F"
+	}
+	r, err := c.request(ctx, receiver, receiverNS, map[string]any{"type": "LAUNCH", "appId": id})
 	if err != nil {
 		return Application{}, err
 	}
@@ -266,7 +287,7 @@ func (c *Client) Launch(ctx context.Context) (Application, error) {
 		return Application{}, err
 	}
 	for _, app := range s.Applications {
-		if app.AppID == appID && app.TransportID != "" {
+		if app.AppID == id && app.TransportID != "" {
 			err = c.send(app.TransportID, connectionNS, map[string]any{"type": "CONNECT", "origin": map[string]any{}})
 			return app, err
 		}
@@ -301,6 +322,34 @@ func (c *Client) Stop(ctx context.Context, app Application) error {
 			_, err = c.request(ctx, receiver, receiverNS, map[string]any{"type": "STOP", "sessionId": app.SessionID})
 			return err
 		}
+	}
+	return nil
+}
+
+// SetLiveVolume adjusts an already-verified session without stopping its media
+// or briefly muting unmuted playback. Muted sessions retain the safer setup path
+// because some receivers clear mute when their level changes.
+func (c *Client) SetLiveVolume(ctx context.Context, level float64, muted bool) error {
+	if muted {
+		return c.SetVolume(ctx, level, true)
+	}
+	if !(level >= 0 && level <= config.MaxReceiverVolume) {
+		return errors.New("receiver volume must be between 0 and 100%")
+	}
+	quantized := float32(level)
+	if float64(quantized) > level {
+		quantized = math.Nextafter32(quantized, 0)
+	}
+	level = float64(quantized)
+	if _, err := c.request(ctx, receiver, receiverNS, map[string]any{"type": "SET_VOLUME", "volume": map[string]any{"level": level}}); err != nil {
+		return err
+	}
+	status, err := c.Status(ctx)
+	if err != nil {
+		return err
+	}
+	if status.Volume.Level > config.MaxReceiverVolume || status.Volume.Level > level+0.00001 {
+		return errors.New("receiver did not confirm requested volume")
 	}
 	return nil
 }

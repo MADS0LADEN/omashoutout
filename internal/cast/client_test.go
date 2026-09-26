@@ -78,3 +78,47 @@ func FuzzDecode(f *testing.F) {
 		decode(b)
 	})
 }
+
+func TestLiveVolumeDoesNotRestartOrMute(t *testing.T) {
+	left, right := net.Pipe()
+	c := &Client{conn: left, pending: make(map[int]chan response), done: make(chan struct{})}
+	c.workers.Add(1)
+	go c.readLoop()
+	defer c.Close()
+	valid := make(chan bool, 1)
+	go func() {
+		defer right.Close()
+		ok := true
+		for i := 0; i < 2; i++ {
+			e, err := readEnvelope(right)
+			if err != nil {
+				valid <- false
+				return
+			}
+			var p map[string]any
+			if json.Unmarshal(e.Payload, &p) != nil {
+				valid <- false
+				return
+			}
+			if i == 0 {
+				v, good := p["volume"].(map[string]any)
+				ok = ok && good && p["type"] == "SET_VOLUME" && len(v) == 1 && v["level"] != nil
+			} else {
+				ok = ok && p["type"] == "GET_STATUS"
+			}
+			payload, _ := json.Marshal(map[string]any{"type": "RECEIVER_STATUS", "requestId": p["requestId"], "status": ReceiverStatus{Volume: Volume{Level: .02, Muted: false}}})
+			b := encode(envelope{Source: receiver, Destination: sender, Namespace: receiverNS, Payload: payload})
+			right.SetWriteDeadline(time.Now().Add(time.Second))
+			right.Write(append(binary.BigEndian.AppendUint32(nil, uint32(len(b))), b...))
+		}
+		valid <- ok
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := c.SetLiveVolume(ctx, .02, false); err != nil {
+		t.Fatal(err)
+	}
+	if !<-valid {
+		t.Fatal("live volume emitted disruptive commands")
+	}
+}

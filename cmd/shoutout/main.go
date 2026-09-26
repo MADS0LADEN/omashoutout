@@ -222,7 +222,7 @@ func doctor() error {
 		fmt.Println("OK audio server reachable")
 	}
 	b, err = exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-encoders").CombinedOutput()
-	for _, encoder := range []string{"libmp3lame", " aac "} {
+	for _, encoder := range []string{"libmp3lame", " aac ", "libopus"} {
 		if err != nil || !strings.Contains(string(b), encoder) {
 			bad = true
 			fmt.Println("MISSING FFmpeg encoder", strings.TrimSpace(encoder))

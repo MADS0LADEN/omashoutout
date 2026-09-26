@@ -20,10 +20,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lkarlslund/shoutout/internal/cast"
 	"github.com/lkarlslund/shoutout/internal/config"
 )
 
 type Stream struct {
+	trimGain         atomic.Uint64
+	realtime         *cast.Transport
 	ContentType      string
 	directory        string
 	lastRequest      atomic.Int64
@@ -52,6 +55,7 @@ func NewStream(parent context.Context, c config.Config, localIP, receiverIP stri
 			os.RemoveAll(s.directory)
 		}
 	}()
+	s.SetTrimDB(c.TrimDB)
 	listener, err := net.Listen("tcp", net.JoinHostPort(localIP, strconv.Itoa(c.MediaPort)))
 	if err != nil {
 		cancel()
@@ -219,7 +223,7 @@ func NewStream(parent context.Context, c config.Config, localIP, receiverIP stri
 			s.report(err)
 		}
 	}()
-	go func() { defer s.wg.Done(); defer input.Close(); s.report(s.process(captured, input, c.TrimDB)) }()
+	go func() { defer s.wg.Done(); defer input.Close(); s.report(s.process(captured, input)) }()
 	go func() {
 		defer s.wg.Done()
 		buf := make([]byte, 1024)
@@ -272,9 +276,10 @@ func attenuate(b []byte, gain float64) float64 {
 	}
 	return peak
 }
-func (s *Stream) process(in io.Reader, out io.Writer, trim float64) error {
+func (s *Stream) SetTrimDB(db float64) { s.trimGain.Store(math.Float64bits(math.Pow(10, db/20))) }
+
+func (s *Stream) process(in io.Reader, out io.Writer) error {
 	buf := make([]byte, 3840)
-	gain := math.Pow(10, trim/20)
 	ramp := 0.0
 	for {
 		n, err := io.ReadFull(in, buf)
@@ -284,7 +289,7 @@ func (s *Stream) process(in io.Reader, out io.Writer, trim float64) error {
 		factor := 0.0
 		if s.Allowed.Load() {
 			ramp = math.Min(1, ramp+0.05)
-			factor = gain * ramp
+			factor = math.Float64frombits(s.trimGain.Load()) * ramp
 		} else {
 			ramp = 0
 		}
@@ -298,7 +303,9 @@ func (s *Stream) process(in io.Reader, out io.Writer, trim float64) error {
 func (s *Stream) Close() {
 	s.Allowed.Store(false)
 	s.cancel()
-	s.server.Close()
+	if s.server != nil {
+		s.server.Close()
+	}
 	s.wg.Wait()
 	s.capture.Wait()
 	s.encoder.Wait()
@@ -314,6 +321,12 @@ func (s *Stream) Close() {
 	}
 }
 func (s *Stream) Subscribers() int {
+	if s.realtime != nil {
+		if s.realtime.Stats().Feedback > 0 {
+			return 1
+		}
+		return 0
+	}
 	if s.directory != "" {
 		if time.Since(time.Unix(0, s.lastRequest.Load())) < 5*time.Second {
 			return 1

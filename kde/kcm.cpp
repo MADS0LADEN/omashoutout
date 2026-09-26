@@ -6,6 +6,7 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QHBoxLayout>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -14,6 +15,7 @@
 #include <QProcess>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QSlider>
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QTimer>
@@ -52,12 +54,13 @@ public:
     scale->setSingleStep(1);
     scale->setSuffix(tr(" %"));
     scale->setObjectName("volumeScale");
-    form->addRow(tr("Receiver volume at full desktop volume:"), scale);
+    form->addRow(tr("Receiver volume at full desktop volume:"),
+                 sliderRow(scale));
     trim = new QDoubleSpinBox(widget());
     trim->setRange(-80, 0);
     trim->setSuffix(tr(" dB"));
     trim->setObjectName("trimDB");
-    form->addRow(tr("Additional attenuation:"), trim);
+    form->addRow(tr("Additional attenuation:"), sliderRow(trim));
     preset = new QComboBox(widget());
     preset->setObjectName("preset");
     for (const auto &p : {"Interactive", "Video", "Music", "Custom"})
@@ -66,6 +69,7 @@ public:
     codec = new QComboBox(widget());
     codec->setObjectName("codec");
     codec->addItem(tr("AAC live segments"), "aac-hls");
+    codec->addItem(tr("Cast Streaming / Opus (experimental)"), "cast-opus");
     codec->addItem(tr("MP3 continuous (high receiver delay)"), "mp3");
     form->addRow(tr("Encoding / delivery:"), codec);
     segment = new QSpinBox(widget());
@@ -73,7 +77,16 @@ public:
     segment->setRange(250, 2000);
     segment->setSingleStep(250);
     segment->setSuffix(tr(" ms"));
-    form->addRow(tr("Live segment length:"), segment);
+    form->addRow(tr("Live segment length:"), sliderRow(segment));
+    delay = new QSpinBox(widget());
+    delay->setObjectName("targetDelayMS");
+    delay->setRange(40, 1000);
+    delay->setSingleStep(20);
+    delay->setSuffix(tr(" ms"));
+    delay->setToolTip(
+        tr("Requested receiver playback delay. Actual audible delay also "
+           "includes capture and encoding. Lower values can cause dropouts."));
+    form->addRow(tr("Cast Streaming target delay:"), sliderRow(delay));
     bitrate = new QComboBox(widget());
     bitrate->setObjectName("bitrate");
     for (int rate : {128, 192, 256, 320})
@@ -84,7 +97,7 @@ public:
     buffer->setRange(40, 2000);
     buffer->setSingleStep(20);
     buffer->setSuffix(tr(" ms"));
-    form->addRow(tr("Host buffer target:"), buffer);
+    form->addRow(tr("Host buffer target:"), sliderRow(buffer));
     enabled = new QCheckBox(tr("Enable this output"), widget());
     enabled->setObjectName("enabled");
     form->addRow(QString(), enabled);
@@ -92,7 +105,9 @@ public:
     auto note =
         new QLabel(tr("The volume scale is configurable from 0–100%. Lower it "
                       "for sensitive speakers. Presets do not guarantee low "
-                      "latency; receiver buffering is additional."),
+                      "latency; receiver buffering is additional. Volume scale "
+                      "and attenuation apply without reconnecting. Encoding or "
+                      "target-delay changes restart playback."),
                    widget());
     note->setWordWrap(true);
     layout->addWidget(note);
@@ -124,14 +139,19 @@ public:
     for (auto spin : {scale, trim})
       connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
               [this] { markAsChanged(); });
-    for (auto spin : {port, buffer, segment})
+    for (auto spin : {port, buffer, segment, delay})
       connect(spin, qOverload<int>(&QSpinBox::valueChanged), this,
               [this] { markAsChanged(); });
     connect(enabled, &QCheckBox::toggled, this, [this] { markAsChanged(); });
     connect(codec, &QComboBox::activated, this, [this] {
-      segment->setEnabled(codec->currentData() == "aac-hls");
+      segment->parentWidget()->setEnabled(codec->currentData() == "aac-hls");
+      delay->parentWidget()->setEnabled(codec->currentData() == "cast-opus");
       preset->setCurrentIndex(3);
       markAsChanged();
+    });
+    connect(delay, qOverload<int>(&QSpinBox::valueChanged), this, [this] {
+      if (!loading)
+        preset->setCurrentIndex(3);
     });
     connect(segment, qOverload<int>(&QSpinBox::valueChanged), this, [this] {
       if (!loading)
@@ -149,7 +169,8 @@ public:
       loading = true;
       if (i < 3) {
         codec->setCurrentIndex(0);
-        segment->setEnabled(true);
+        segment->parentWidget()->setEnabled(true);
+        delay->parentWidget()->setEnabled(false);
       }
       if (i == 0) {
         bitrate->setCurrentIndex(0);
@@ -189,6 +210,7 @@ public:
   }
   void save() override {
     config["codec"] = codec->currentData().toString();
+    config["target_delay_ms"] = delay->value();
     config["segment_ms"] = segment->value();
     config["host"] = host->text().trimmed();
     config["port"] = port->value();
@@ -201,8 +223,8 @@ public:
     run({"apply"}, QJsonDocument(config).toJson(QJsonDocument::Compact),
         [this](QByteArray) {
           setNeedsSave(false);
-          error->setText(tr(
-              "Settings applied. Volume and mute remain controlled by KDE."));
+          error->setText(tr("Settings applied. Volume scale and attenuation "
+                            "update without reconnecting."));
         });
   }
   void defaults() override {
@@ -210,21 +232,59 @@ public:
     trim->setValue(0);
     loading = true;
     codec->setCurrentIndex(0);
-    segment->setEnabled(true);
+    segment->parentWidget()->setEnabled(true);
+    delay->parentWidget()->setEnabled(false);
     preset->setCurrentIndex(1);
     bitrate->setCurrentIndex(1);
     buffer->setValue(200);
     segment->setValue(500);
+    delay->setValue(400);
     loading = false;
     enabled->setChecked(true);
     markAsChanged();
   }
 
 private:
+  QWidget *sliderRow(QDoubleSpinBox *spin) {
+    auto row = new QWidget(widget());
+    auto layout = new QHBoxLayout(row);
+    layout->setContentsMargins(0, 0, 0, 0);
+    auto slider = new QSlider(Qt::Horizontal, row);
+    slider->setObjectName(spin->objectName() + "Slider");
+    slider->setRange(qRound(spin->minimum() * 10),
+                     qRound(spin->maximum() * 10));
+    slider->setSingleStep(1);
+    slider->setPageStep(10);
+    slider->setValue(qRound(spin->value() * 10));
+    connect(slider, &QSlider::valueChanged, spin,
+            [spin](int value) { spin->setValue(value / 10.0); });
+    connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), slider,
+            [slider](double value) { slider->setValue(qRound(value * 10)); });
+    layout->addWidget(slider, 1);
+    layout->addWidget(spin);
+    return row;
+  }
+  QWidget *sliderRow(QSpinBox *spin) {
+    auto row = new QWidget(widget());
+    auto layout = new QHBoxLayout(row);
+    layout->setContentsMargins(0, 0, 0, 0);
+    auto slider = new QSlider(Qt::Horizontal, row);
+    slider->setObjectName(spin->objectName() + "Slider");
+    slider->setRange(spin->minimum(), spin->maximum());
+    slider->setSingleStep(spin->singleStep());
+    slider->setPageStep(spin->singleStep() * 5);
+    slider->setValue(spin->value());
+    connect(slider, &QSlider::valueChanged, spin, &QSpinBox::setValue);
+    connect(spin, qOverload<int>(&QSpinBox::valueChanged), slider,
+            &QSlider::setValue);
+    layout->addWidget(slider, 1);
+    layout->addWidget(spin);
+    return row;
+  }
   QJsonObject config;
   QComboBox *devices, *preset, *bitrate, *codec;
   QLineEdit *host;
-  QSpinBox *port, *buffer, *segment;
+  QSpinBox *port, *buffer, *segment, *delay;
   QDoubleSpinBox *scale, *trim;
   QCheckBox *enabled;
   QLabel *status, *error;
@@ -270,7 +330,9 @@ private:
     loading = true;
     codec->setCurrentIndex(codec->findData(config["codec"].toString()));
     segment->setValue(config["segment_ms"].toInt(500));
-    segment->setEnabled(codec->currentData() == "aac-hls");
+    delay->setValue(config["target_delay_ms"].toInt(400));
+    segment->parentWidget()->setEnabled(codec->currentData() == "aac-hls");
+    delay->parentWidget()->setEnabled(codec->currentData() == "cast-opus");
     host->setText(config["host"].toString());
     port->setValue(config["port"].toInt(8009));
     scale->setValue(config["receiver_volume"].toDouble() * 100);
@@ -311,6 +373,13 @@ private:
               .arg(s["sink_muted"].toBool() ? tr("muted") : tr("unmuted"))
               .arg(s["receiver_volume"].toDouble() * 100, 0, 'f', 1)
               .arg(s["message"].toString()));
+      if (s["audio_frames"].toDouble() > 0) {
+        status->setText(
+            status->text() +
+            tr("\nReceiver-reported buffer: %1 ms · Retransmitted packets: %2")
+                .arg(s["receiver_delay_ms"].toInt())
+                .arg(s["retransmits"].toDouble(), 0, 'f', 0));
+      }
     });
   }
 };

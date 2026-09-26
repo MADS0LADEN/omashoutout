@@ -1,7 +1,9 @@
 package audio
 
 import (
+	"bytes"
 	"encoding/binary"
+	"io"
 	"math"
 	"testing"
 )
@@ -46,5 +48,32 @@ func TestSlowSubscriberDisconnected(t *testing.T) {
 	}
 	if len(fast) != 2 {
 		t.Fatal("fast reader blocked")
+	}
+}
+
+type callbackWriter func([]byte) (int, error)
+
+func (w callbackWriter) Write(b []byte) (int, error) { return w(b) }
+func TestAttenuationChangesDuringCapture(t *testing.T) {
+	s := &Stream{}
+	s.SetTrimDB(0)
+	s.Allowed.Store(true)
+	pcm := make([]byte, 3840*40)
+	for i := 0; i < len(pcm); i += 4 {
+		binary.LittleEndian.PutUint32(pcm[i:], math.Float32bits(.5))
+	}
+	count := 0
+	err := s.process(bytes.NewReader(pcm), callbackWriter(func(b []byte) (int, error) {
+		count++
+		if count == 20 {
+			s.SetTrimDB(-20)
+		}
+		if count == 40 && math.Abs(float64(math.Float32frombits(binary.LittleEndian.Uint32(b)))-.05) > 1e-6 {
+			t.Fatal("new gain did not reach running capture")
+		}
+		return len(b), nil
+	}))
+	if err != io.EOF || count != 40 {
+		t.Fatalf("capture ended early: %d %v", count, err)
 	}
 }

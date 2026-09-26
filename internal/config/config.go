@@ -13,6 +13,7 @@ import (
 const MaxReceiverVolume = 1.0
 
 type Config struct {
+	TargetDelayMS  int     `json:"target_delay_ms"`
 	Codec          string  `json:"codec"`
 	SegmentMS      int     `json:"segment_ms"`
 	Enabled        bool    `json:"enabled"`
@@ -30,12 +31,15 @@ type Config struct {
 }
 
 func Default() Config {
-	return Config{Codec: "aac-hls", SegmentMS: 500, Enabled: true, Version: 1, Port: 8009, TrimDB: 0, ReceiverVolume: 0.01, Preset: "video", Bitrate: 192, BufferMS: 200, MediaPort: 17833}
+	return Config{TargetDelayMS: 400, Codec: "aac-hls", SegmentMS: 500, Enabled: true, Version: 1, Port: 8009, TrimDB: 0, ReceiverVolume: 0.01, Preset: "video", Bitrate: 192, BufferMS: 200, MediaPort: 17833}
 }
 
 func (c Config) Validate() error {
-	if c.Codec != "aac-hls" && c.Codec != "mp3" {
-		return errors.New("codec must be aac-hls or mp3")
+	if c.Codec != "aac-hls" && c.Codec != "mp3" && c.Codec != "cast-opus" {
+		return errors.New("codec must be cast-opus, aac-hls or mp3")
+	}
+	if c.TargetDelayMS < 40 || c.TargetDelayMS > 1000 {
+		return errors.New("target playback delay must be between 40 and 1000 ms")
 	}
 	if c.SegmentMS < 250 || c.SegmentMS > 2000 {
 		return errors.New("live segment length must be between 250 and 2000 ms")
@@ -64,6 +68,22 @@ func (c Config) Validate() error {
 		return errors.New("buffer must be between 40 and 2000 ms")
 	}
 	return nil
+}
+
+// RestartRequired compares only settings consumed by the active transport.
+// Gain and descriptive preset metadata can change in an existing session.
+func (c Config) RestartRequired(next Config) bool {
+	if c.Enabled != next.Enabled || c.DeviceID != next.DeviceID || c.Host != next.Host || c.Port != next.Port || c.Codec != next.Codec || c.Bitrate != next.Bitrate {
+		return true
+	}
+	switch c.Codec {
+	case "cast-opus":
+		return c.TargetDelayMS != next.TargetDelayMS || c.BufferMS != next.BufferMS
+	case "aac-hls":
+		return c.SegmentMS != next.SegmentMS || min(100, c.BufferMS) != min(100, next.BufferMS) || c.MediaPort != next.MediaPort
+	default:
+		return c.BufferMS != next.BufferMS || c.MediaPort != next.MediaPort
+	}
 }
 
 func Path() (string, error) {

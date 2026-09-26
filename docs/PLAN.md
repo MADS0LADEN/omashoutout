@@ -9,9 +9,9 @@ flowchart LR
     Applications --> Sink[Shoutout output: native gain and mute]
     Sink --> Capture[Virtual monitor capture]
     Capture --> PCM[Float PCM trim and peak bound]
-    PCM --> Encoder[FFmpeg AAC or MP3]
-    Encoder --> HTTP[Receiver-restricted media server]
-    HTTP --> Receiver[Google audio device]
+    PCM --> Encoder[FFmpeg Opus, AAC or MP3]
+    Encoder --> Transport[Encrypted UDP or receiver-restricted HTTP]
+    Transport --> Receiver[Google audio device]
     Settings[KDE ShoutOut settings] --> IPC[Private Unix socket]
     IPC --> Service[Go service]
     Service --> Receiver
@@ -19,17 +19,19 @@ flowchart LR
 
 A stable owned null sink survives service restarts to preserve routing and native gain/mute. Capture is pinned to its monitor and marked virtual. Native mute is mirrored to the receiver; volume is applied once by the audio server, with independent user-selected receiver scaling and optional PCM trim. New connections verify muted receiver volume before enabling non-silent PCM.
 
+Cast Streaming negotiates the built-in audio-only receiver, stereo 48 kHz Opus, a UDP endpoint and an explicit playback-delay target. Frames are encrypted independently with session keys, packetized, paced, acknowledged and retained only inside a bounded retransmission window. A stalled acknowledgement stream or a late encoder triggers reconnection rather than an increasing backlog. Requested/reported buffer durations are shown separately from audible latency.
+
 AAC live delivery uses a sliding six-segment playlist, bounded retained files, tokenized URLs and prompt segment publication. Continuous MP3 remains selectable. Host buffers and live segment duration are adjustable; opaque receiver buffers remain outside direct sender control.
 
-The KCM page configures destination discovery/manual address, full-range receiver volume scale, attenuation, encoding, bitrate, host buffering, segment duration, presets and enablement. It shows connection status and native mute/volume. Settings travel through a mode-0600 Unix socket. There is no web settings UI.
+The KCM page configures destination discovery/manual address, full-range receiver volume scale, attenuation, encoding, bitrate, host buffering, segment duration, presets and enablement. It shows connection status and native mute/volume. Volume scale and PCM attenuation apply live; no-op and inactive transport settings do not reconnect. Active transport changes restart the session. Numeric inputs and sliders stay synchronized. Settings travel through a mode-0600 Unix socket. There is no web settings UI.
 
 ## Remaining milestones
 
-1. Measure audible delay on Lars Kontor with AAC live segments, including start/stop and drift over 30 minutes. Compare 250, 500 and 1000 ms segments. Distinguish receiver timeline estimates from acoustic measurement. The user observed about 30 seconds with continuous MP3.
+1. Measure audible delay for Cast Streaming at 400, 200 and 100 ms requested targets, including loss recovery and long-duration drift. Also measure audible delay on Lars Kontor with AAC live segments, including start/stop and drift over 30 minutes. Compare 250, 500 and 1000 ms segments. Distinguish receiver timeline estimates from acoustic measurement. The user observed about 30 seconds with continuous MP3.
 2. Validate reconnects, audio-server restart, suspend/resume, takeover and external volume changes on hardware. Retain bounded buffers and prevent stale audio replay.
 3. Validate advertised speaker groups. Multiple independent destinations and synchronized playback across them are not implemented.
 4. Produce native distro packages with the KCM in the standard plugin directory and declared runtime dependencies. Test a fresh installation and removal; the current per-user installer needs a new Plasma login for ordinary launcher discovery.
-5. Investigate a different supported transport if segmented delivery still misses video/game needs. Do not label multi-second audio interactive or imply automatic video synchronization.
+5. Tune the implemented real-time transport using receiver feedback and measured acoustic results. Do not label multi-second audio interactive or imply automatic video synchronization.
 
 Go remains appropriate for service and network control. Changing language does not itself remove receiver buffering. Keep the small native KDE integration separate; reconsider core language only if measured implementation constraints justify it.
 

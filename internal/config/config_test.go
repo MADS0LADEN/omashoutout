@@ -48,3 +48,15 @@ func TestPersistenceAndDefaults(t *testing.T) {
 		t.Fatal("invalid write replaced safe config")
 	}
 }
+
+func TestRealtimeDelayBounds(t *testing.T) {
+	for _, delay := range []int{0, 39, 40, 100, 400, 1000, 1001} {
+		c := Default()
+		c.Codec = "cast-opus"
+		c.TargetDelayMS = delay
+		valid := delay >= 40 && delay <= 1000
+		if (c.Validate() == nil) != valid {
+			t.Fatalf("delay %d validation", delay)
+		}
+	}
+}

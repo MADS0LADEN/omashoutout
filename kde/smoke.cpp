@@ -5,6 +5,7 @@
 #include <QDoubleSpinBox>
 #include <QLabel>
 #include <QPushButton>
+#include <QSlider>
 #include <QSpinBox>
 #include <QTimer>
 #include <cstdio>
@@ -37,7 +38,7 @@ int main(int argc, char **argv) {
     auto status = w->findChild<QLabel *>("status");
     auto codec = w->findChild<QComboBox *>("codec");
     auto segment = w->findChild<QSpinBox *>("segmentMS");
-    if (!codec || codec->count() != 2 || !segment ||
+    if (!codec || codec->count() != 3 || !segment ||
         segment->minimum() != 250 || segment->maximum() != 2000 || !scale ||
         scale->maximum() != 100 || !devices || devices->count() < 2 ||
         !status || status->text().isEmpty()) {
@@ -45,6 +46,25 @@ int main(int argc, char **argv) {
       app.exit(1);
       return;
     }
+    auto sliders = w->findChildren<QSlider *>();
+    auto volumeSlider = w->findChild<QSlider *>("volumeScaleSlider");
+    if (sliders.size() != 5 || !volumeSlider) {
+      fprintf(stderr, "Missing native sliders\n");
+      app.exit(1);
+      return;
+    }
+    double previous = scale->value();
+    volumeSlider->setValue(31);
+    if (qAbs(scale->value() - 3.1) > 0.001) {
+      app.exit(1);
+      return;
+    }
+    scale->setValue(2.7);
+    if (volumeSlider->value() != 27) {
+      app.exit(1);
+      return;
+    }
+    scale->setValue(previous);
     printf("Native KDE module loaded; full 0–100%% scale; %d destination "
            "entries; status available.\n",
            devices->count());
