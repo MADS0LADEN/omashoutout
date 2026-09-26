@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ShoutOut
+Comment=Use your Google Audio compatible speakers for system audio
+Exec=shoutout configure
+Icon=audio-speakers
+Terminal=false
+Categories=AudioVideo;Audio;

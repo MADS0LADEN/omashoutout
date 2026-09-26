@@ -36,7 +36,7 @@ func NewRealtime(parent context.Context, c config.Config, localIP, remoteIP stri
 			}
 		}
 	}()
-	s.capture = exec.CommandContext(ctx, "parec", "--device="+SinkName+".monitor", "--format=float32le", "--rate=48000", "--channels=2", "--latency-msec="+strconv.Itoa(captureLatencyMS), "--property=application.name=Shoutout", "--property=node.dont-reconnect=true", "--property=node.virtual=true", "--property=media.role=filter")
+	s.capture = exec.CommandContext(ctx, "parec", "--device="+SinkName+".monitor", "--format=float32le", "--rate=48000", "--channels=2", "--latency-msec="+strconv.Itoa(captureLatencyMS), "--property=application.name=ShoutOut", "--property=node.dont-reconnect=true", "--property=node.virtual=true", "--property=media.role=filter")
 	captured, err := s.capture.StdoutPipe()
 	if err != nil {
 		return nil, err

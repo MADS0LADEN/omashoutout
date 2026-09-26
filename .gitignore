@@ -3,3 +3,8 @@
 /bin/
 /dist/
 /build/
+
+/packaging/arch/src/
+/packaging/arch/pkg/
+/packaging/arch/shoutout/
+/packaging/arch/*.pkg.tar.*

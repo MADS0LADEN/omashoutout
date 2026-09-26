@@ -2,6 +2,8 @@
 
 ## Install
 
+For Arch Linux, the [PKGBUILD](../packaging/arch/README.md) installs system-wide, including the native KDE module. The instructions below describe the alternative per-user installation.
+
 Requires a KDE Plasma 6 desktop, a systemd user session, PipeWire's PulseAudio compatibility service, `pactl`, `parec`, and FFmpeg with AAC, MP3 and `libopus` encoders. Building also requires Go (see `go.mod`), CMake, Ninja, a C++20 compiler, Qt6 Widgets and Network, and KDE Frameworks 6 KCMUtils and CoreAddons development files. Arch is the current development platform; other distributions need validation.
 
 ```sh
@@ -12,13 +14,13 @@ make build kde
 shoutout configure
 ```
 
-The per-user installer copies the service binary, native settings plugin, desktop launcher and Plasma environment script, then enables the systemd user service. It preserves the selected output and existing Shoutout volume/mute. A newly created output starts muted at a default receiver scale of 1%.
+The per-user installer copies the service binary, native settings plugin, desktop launcher and Plasma environment script, then enables the systemd user service. It preserves the selected output and existing ShoutOut volume/mute. A newly created output starts muted at a default receiver scale of 1%.
 
-`shoutout configure` opens the ShoutOut module inside KDE System Settings immediately. The regular System Settings launcher discovers the per-user plugin after the next Plasma login. Close an already open System Settings window before using the new launcher. A system package can instead install the plugin into the standard Qt6 plugin directory; no distro package or complete binary release is published yet. The Go-only CI artifacts do not include the native module.
+`shoutout configure` opens the ShoutOut module inside KDE System Settings immediately. The regular System Settings launcher discovers the per-user plugin after the next Plasma login. Close an already open System Settings window before using the new launcher. A system package can instead install the plugin into the standard Qt6 plugin directory; an Arch Linux PKGBUILD is included; no complete binary release is published yet. The Go-only CI artifacts do not include the native module.
 
 ## Use
 
-Choose a detected receiver or enter `address:port` (for example `192.168.1.10:8009`). The service discovers receivers continuously from startup and pushes live changes to the settings dropdown. Devices disappear after 45 seconds without refreshed discovery records, or earlier when they announce departure. Your selected destination is retained if it becomes unavailable. One destination is supported at a time; advertised speaker groups can be selected but have not been validated. Select Shoutout in KDE's audio selector, unmute it and route your applications normally.
+Choose a detected receiver or enter `address:port` (for example `192.168.1.10:8009`). The service discovers receivers continuously from startup and pushes live changes to the settings dropdown. Devices disappear after 45 seconds without refreshed discovery records, or earlier when they announce departure. Your selected destination is retained if it becomes unavailable. One destination is supported at a time; advertised speaker groups can be selected but have not been validated. Select ShoutOut in KDE's audio selector, unmute it and route your applications normally.
 
 - KDE's normal output slider and mute are authoritative. Internal capture is marked virtual so it does not appear as an application in KDE's mixer.
 - Receiver volume scale is configurable from **0–100%**. Keep it low for sensitive speakers. The 5% maximum applies only to development speaker tests.

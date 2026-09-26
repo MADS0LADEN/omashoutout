@@ -6,7 +6,7 @@ The Go service owns discovery, Cast session control, persistence and supervision
 
 ```mermaid
 flowchart LR
-    Applications --> Sink[Shoutout output: native gain and mute]
+    Applications --> Sink[ShoutOut output: native gain and mute]
     Sink --> Capture[Virtual monitor capture]
     Capture --> PCM[Float PCM mute, fade-in and peak bound]
     PCM --> Encoder[FFmpeg Opus, AAC or MP3]

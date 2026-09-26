@@ -30,7 +30,7 @@ public:
     auto layout = new QVBoxLayout(widget());
     auto description = new QLabel(
         tr("Use KDE’s normal Audio output controls for volume and mute. These "
-           "settings configure where the Shoutout device sends audio."),
+           "settings configure where the ShoutOut device sends audio."),
         widget());
     description->setWordWrap(true);
     layout->addWidget(description);

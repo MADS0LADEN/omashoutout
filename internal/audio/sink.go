@@ -54,7 +54,7 @@ func ReadSink(ctx context.Context) (SinkState, error) {
 			return s, nil
 		}
 	}
-	return SinkState{}, errors.New("Shoutout output is unavailable")
+	return SinkState{}, errors.New("ShoutOut output is unavailable")
 }
 func SetMuted(ctx context.Context, muted bool) error {
 	_, err := pactl(ctx, "set-sink-mute", SinkName, strconv.FormatBool(muted))
@@ -78,7 +78,7 @@ func NewSink(ctx context.Context) (*Sink, error) {
 			return &Sink{module: strconv.Itoa(m.Index)}, nil
 		}
 	}
-	b, err = pactl(ctx, "load-module", "module-null-sink", "sink_name="+SinkName, "rate=48000", "channels=2", "format=float32le", `sink_properties=device.description="Shoutout" device.icon_name="audio-speakers" shoutout.owner=shoutout priority.session=1`)
+	b, err = pactl(ctx, "load-module", "module-null-sink", "sink_name="+SinkName, "rate=48000", "channels=2", "format=float32le", `sink_properties=device.description="ShoutOut" device.icon_name="audio-speakers" shoutout.owner=shoutout priority.session=1`)
 	if err != nil {
 		return nil, err
 	}

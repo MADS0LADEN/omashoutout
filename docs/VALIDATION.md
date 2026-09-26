@@ -4,7 +4,7 @@ Local platform: Arch Linux, KDE Plasma 6, PipeWire 1.6.9, Chromecast Audio named
 
 ## Confirmed
 
-- User confirms Shoutout appears as an output and produces audible audio. The continuous MP3 path had approximately 30 seconds of user-observed delay.
+- User confirms ShoutOut appears as an output and produces audible audio. The continuous MP3 path had approximately 30 seconds of user-observed delay.
 - AAC live segments are accepted by the receiver, with repeated playlist/segment requests and advancing PLAYING status. The user estimates roughly two seconds of audible delay with 500 ms segments, 128 kbps AAC and an 80 ms host buffer. This is a listening estimate, not an instrumented measurement.
 - Native capture has `node.virtual=true` and no Pulse client association, allowing KDE to exclude it from the Applications list.
 - An isolated sink test confirms native volume affects monitor PCM and native mute produces silence. Service restarts adopt the existing sink without resetting gain or routing.

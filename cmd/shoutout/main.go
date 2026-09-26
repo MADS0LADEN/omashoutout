@@ -42,7 +42,7 @@ func run(args []string) error {
 	}
 	switch args[0] {
 	case "help", "--help", "-h":
-		fmt.Println("Shoutout " + version + ` — virtual audio output for Google Cast
+		fmt.Println("ShoutOut " + version + ` — virtual audio output for Google Cast
 
 Commands:
   devices                 Discover receivers on the local network
@@ -122,11 +122,12 @@ Use KDE audio controls for volume and mute.`)
 			return err
 		}
 		plugin := filepath.Join(home, ".local", "lib", "qt6", "plugins", "plasma", "kcms", "systemsettings_qwidgets", "kcm_shoutout.so")
-		if _, err = os.Stat(plugin); err != nil {
-			return errors.New("native KDE module is not installed; build with make kde and run shoutout install")
-		}
 		cmd := exec.Command("systemsettings", "kcm_shoutout")
-		cmd.Env = append(os.Environ(), "QT_PLUGIN_PATH="+pluginSearchPath(home))
+		// Packaged plugins use Qt's system search path. Extend it only for
+		// installations in the user's home directory.
+		if _, err = os.Stat(plugin); err == nil {
+			cmd.Env = append(os.Environ(), "QT_PLUGIN_PATH="+pluginSearchPath(home))
+		}
 		return cmd.Run()
 	case "status", "config":
 		r, err := control.Call(control.Request{Method: "status"})
@@ -178,7 +179,7 @@ func daemon(path string) error {
 	}
 	defer lock.Close()
 	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		return errors.New("Shoutout is already running")
+		return errors.New("ShoutOut is already running")
 	}
 	listener, err := control.Listen()
 	if err != nil {
@@ -332,11 +333,11 @@ func install(remove bool) error {
 	}
 	// systemd interprets percent specifiers even in quoted command arguments.
 	escaped := strconv.Quote(strings.ReplaceAll(binaryPath, "%", "%%"))
-	unit := "[Unit]\nDescription=Shoutout virtual audio output\nAfter=pipewire-pulse.service\nStartLimitIntervalSec=60\nStartLimitBurst=5\n\n[Service]\nExecStart=" + escaped + " run\nRestart=on-failure\nRestartSec=3\nTimeoutStopSec=10\nNoNewPrivileges=yes\n\n[Install]\nWantedBy=default.target\n"
+	unit := "[Unit]\nDescription=ShoutOut virtual audio output\nAfter=pipewire-pulse.service\nStartLimitIntervalSec=60\nStartLimitBurst=5\n\n[Service]\nExecStart=" + escaped + " run\nRestart=on-failure\nRestartSec=3\nTimeoutStopSec=10\nNoNewPrivileges=yes\n\n[Install]\nWantedBy=default.target\n"
 	if err = os.WriteFile(unitPath, []byte(unit), 0644); err != nil {
 		return err
 	}
-	desktop := "[Desktop Entry]\nType=Application\nName=Shoutout\nComment=Configure your virtual audio output\nExec=" + escaped + " configure\nIcon=audio-speakers\nTerminal=false\nCategories=AudioVideo;Audio;\n"
+	desktop := "[Desktop Entry]\nType=Application\nName=ShoutOut\nComment=Configure your virtual audio output\nExec=" + escaped + " configure\nIcon=audio-speakers\nTerminal=false\nCategories=AudioVideo;Audio;\n"
 	if err = os.WriteFile(desktopPath, []byte(desktop), 0644); err != nil {
 		return err
 	}
@@ -348,7 +349,7 @@ func install(remove bool) error {
 			return err
 		}
 	}
-	fmt.Println("Installed and started. Use KDE Audio for volume/mute and Shoutout native settings for destination and presets.")
+	fmt.Println("Installed and started. Use KDE Audio for volume/mute and ShoutOut native settings for destination and presets.")
 	return nil
 }
 
