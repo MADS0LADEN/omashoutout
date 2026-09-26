@@ -71,7 +71,7 @@ device disconnection was not exercised; expiry uses synthetic DNS records in tes
 ## Playback presets
 
 The native smoke check activates each preset without saving or changing speaker
-playback: Low latency selects Opus/128 kbps/40 ms, Balanced selects
+playback: Low latency selects Opus/128 kbps/20 ms, Balanced selects
 Opus/192 kbps/100 ms, and High quality selects AAC/320 kbps/500 ms segments.
 New configurations default to Balanced. A configuration migration test verifies
 that old preset names become Custom without altering their playback parameters.
@@ -124,8 +124,7 @@ Frame duration now follows the receiver target: 5 ms below 40 ms, 10 ms
 below 80 ms, and 20 ms otherwise. Capture requests and WAV input packets are
 5 ms; the PCM gate also processes 5 ms batches while preserving fade duration.
 RTP timestamps, pacing and the acknowledgement window use the selected frame
-duration. KDE permits custom targets from 10 ms, in 10 ms steps. Preset targets
-remain unchanged.
+duration. KDE permits custom targets from 10 ms, in 10 ms steps. The Low latency preset uses a 20 ms target; Balanced remains at 100 ms.
 
 Silent receiver tests accepted 5 and 10 ms frames. A 20-second synthetic capture
 through the real encoder and UDP transport to Køkkenet, muted at verified 1%,

@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
           bitrate->currentData().toInt() != (i == 0   ? 128
                                              : i == 1 ? 192
                                                       : 320) ||
-          (i < 2 && delay->value() != (i == 0 ? 40 : 100)) ||
+          (i < 2 && delay->value() != (i == 0 ? 20 : 100)) ||
           (i == 2 && segment->value() != 500)) {
         fprintf(stderr, "Preset mapping failed\n");
         app.exit(1);

@@ -158,7 +158,7 @@ public:
       }
       if (i == 0) {
         bitrate->setCurrentIndex(bitrate->findData(128));
-        delay->setValue(40);
+        delay->setValue(20);
       }
       if (i == 1) {
         bitrate->setCurrentIndex(bitrate->findData(192));

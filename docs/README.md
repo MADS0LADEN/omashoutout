@@ -13,7 +13,7 @@ ShoutOut turns a Google Cast speaker into a Linux audio output. Select it in KDE
 
 | Preset | Playback |
 |---|---|
-| Low latency | Opus · 128 kbps · 40 ms receiver target |
+| Low latency | Opus · 128 kbps · 20 ms receiver target |
 | Balanced | Opus · 192 kbps · 100 ms receiver target |
 | High quality | AAC · 320 kbps |
 
