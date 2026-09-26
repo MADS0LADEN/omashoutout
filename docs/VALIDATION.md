@@ -90,3 +90,9 @@ smoke check and the packaged executable reported its VCS version. The desktop
 entry passed `desktop-file-validate` and the package file list was inspected.
 
 This was not a clean-chroot build or a system-wide installation test.
+
+The Arch package now ships an automatic user-session startup symlink and an
+install hook that starts the service in logged-in users' managers. Mock-command
+checks covered install, upgrade, removal and skipping root. A rebuilt package
+passed its Go checks and contains the expected symlink and `.INSTALL` script.
+Actual privileged pacman installation remains untested on this host.
