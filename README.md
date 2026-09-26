@@ -1,6 +1,6 @@
 # ShoutOut
 
-**Your desktop audio. Your Google speakers. Right from KDE.**
+**Use your Google Audio compatible speakers for system audio**
 
 ShoutOut turns a Google Cast speaker into a Linux audio output. Select it in KDE’s audio menu and send sound from your games, browser, music player—or your whole desktop.
 
