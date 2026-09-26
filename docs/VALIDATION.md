@@ -35,3 +35,18 @@ Instrumented acoustic latency, long-duration drift, network recovery, suspend/re
 The per-user plugin becomes available to the ordinary System Settings launcher after a Plasma login. `shoutout configure` supplies its search path immediately. No privileged system plugin install is required by this method.
 
 GitHub Actions previously refused to start jobs due to an account billing/spending-limit restriction. No hosted workflow steps ran; local checks are independent of that restriction.
+
+## Reconnect setup timing
+
+Selected-device discovery now returns once its complete mDNS records arrive,
+while the settings device list still collects all replies. A read-only lookup
+of Lars Kontor took 72 ms. Receiver setup reads the current volume and changes
+only mute when the level already matches; changing the level still uses the
+mute/set/reassert/verify sequence. Volume confirmation remains mandatory.
+
+After deployment, service timing logs on Lars Kontor recorded 137 ms from
+connection setup through enabling playback (discovery 4 ms, TLS 33 ms, launch
+36 ms, negotiation 16 ms). This excludes stopping a previous stream and is
+not a measurement of the audible interruption or end-to-end audio latency.
+Race tests and vet passed, including receiver confirmation, minimal mute-only
+commands, unchanged volume verification, and fragmented discovery records.

@@ -25,3 +25,21 @@ func TestRecordsAcrossPackets(t *testing.T) {
 	}
 	r.ingest([]byte{1, 2, 3})
 }
+
+func TestDeviceRequiresCompleteRecords(t *testing.T) {
+	r := records{txt: map[string]map[string]string{}, srv: map[string]dnsmessage.SRVResource{}, ips: map[string]string{}}
+	instance := "room._googlecast._tcp.local."
+	r.txt[instance] = map[string]string{"fn": "Room", "id": "selected"}
+	if len(r.devices()) != 0 {
+		t.Fatal("returned device without address")
+	}
+	r.srv[instance] = dnsmessage.SRVResource{Port: 8009, Target: dnsmessage.MustNewName("Speaker.local.")}
+	if len(r.devices()) != 0 {
+		t.Fatal("returned device before host resolution")
+	}
+	r.ips["speaker.local."] = "192.0.2.3"
+	got := r.devices()
+	if len(got) != 1 || got[0].ID != "selected" || got[0].Host != "192.0.2.3" || got[0].Port != 8009 {
+		t.Fatalf("resolved devices: %+v", got)
+	}
+}

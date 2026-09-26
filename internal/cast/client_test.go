@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net"
 	"testing"
@@ -29,7 +30,7 @@ func TestVolumeRequiresReceiverConfirmation(t *testing.T) {
 			defer c.Close()
 			go func() {
 				defer right.Close()
-				for i := 0; i < 4; i++ {
+				for i := 0; i < 5; i++ {
 					e, err := readEnvelope(right)
 					if err != nil {
 						return
@@ -120,5 +121,59 @@ func TestLiveVolumeDoesNotRestartOrMute(t *testing.T) {
 	}
 	if !<-valid {
 		t.Fatal("live volume emitted disruptive commands")
+	}
+}
+
+func TestVerifiedVolumeAvoidsRedundantWrites(t *testing.T) {
+	for _, alreadyMuted := range []bool{true, false} {
+		t.Run(fmt.Sprint(alreadyMuted), func(t *testing.T) {
+			left, right := net.Pipe()
+			c := &Client{conn: left, pending: make(map[int]chan response), done: make(chan struct{})}
+			c.workers.Add(1)
+			go c.readLoop()
+			defer c.Close()
+			valid := make(chan bool, 1)
+			go func() {
+				defer right.Close()
+				muted := alreadyMuted
+				count := 1
+				if !alreadyMuted {
+					count = 3
+				}
+				ok := true
+				for i := 0; i < count; i++ {
+					e, err := readEnvelope(right)
+					if err != nil {
+						valid <- false
+						return
+					}
+					var p map[string]any
+					if json.Unmarshal(e.Payload, &p) != nil {
+						valid <- false
+						return
+					}
+					if i == 1 {
+						v, good := p["volume"].(map[string]any)
+						ok = ok && good && p["type"] == "SET_VOLUME" && len(v) == 1 && v["muted"] == true
+						muted = true
+					} else {
+						ok = ok && p["type"] == "GET_STATUS"
+					}
+					payload, _ := json.Marshal(map[string]any{"type": "RECEIVER_STATUS", "requestId": p["requestId"], "status": ReceiverStatus{Volume: Volume{Level: .02, Muted: muted}}})
+					b := encode(envelope{Source: receiver, Destination: sender, Namespace: receiverNS, Payload: payload})
+					right.SetWriteDeadline(time.Now().Add(time.Second))
+					right.Write(append(binary.BigEndian.AppendUint32(nil, uint32(len(b))), b...))
+				}
+				valid <- ok
+			}()
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if err := c.SetVolume(ctx, .02, true); err != nil {
+				t.Fatal(err)
+			}
+			if !<-valid {
+				t.Fatal("wrote a redundant volume level or skipped verification")
+			}
+		})
 	}
 }

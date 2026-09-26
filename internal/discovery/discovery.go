@@ -58,6 +58,30 @@ func (r *records) ingest(data []byte) {
 
 // Discover uses IPv4 mDNS directly and does not require a system discovery daemon.
 func Discover(ctx context.Context) ([]Device, error) {
+	return discover(ctx, "")
+}
+
+// Find returns as soon as all address records for the selected receiver arrive.
+func Find(ctx context.Context, id string) (Device, error) {
+	if id == "" {
+		return Device{}, errors.New("receiver ID is empty")
+	}
+	devices, err := discover(ctx, id)
+	if err != nil {
+		return Device{}, err
+	}
+	for _, d := range devices {
+		if d.ID == id {
+			return d, nil
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return Device{}, err
+	}
+	return Device{}, errors.New("selected receiver not found")
+}
+
+func discover(ctx context.Context, id string) ([]Device, error) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return nil, err
@@ -69,6 +93,7 @@ func Discover(ctx context.Context) ([]Device, error) {
 		return nil, err
 	}
 	group := &net.UDPAddr{IP: net.IPv4(224, 0, 0, 251), Port: 5353}
+	updated := make(chan struct{}, 1)
 	var wg sync.WaitGroup
 	var connections []*net.UDPConn
 	for _, iface := range interfaces {
@@ -99,6 +124,10 @@ func Discover(ctx context.Context) ([]Device, error) {
 					return
 				}
 				r.ingest(b[:n])
+				select {
+				case updated <- struct{}{}:
+				default:
+				}
 			}
 		}()
 	}
@@ -121,12 +150,24 @@ loop:
 		select {
 		case <-ctx.Done():
 			break loop
+		case <-updated:
+			if id != "" {
+				for _, d := range r.devices() {
+					if d.ID == id {
+						return []Device{d}, nil
+					}
+				}
+			}
 		case <-timer.C:
 			for _, c := range connections {
 				_, _ = c.WriteToUDP(query, group)
 			}
 		}
 	}
+	return r.devices(), nil
+}
+
+func (r *records) devices() []Device {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var devices []Device
@@ -142,5 +183,5 @@ loop:
 		devices = append(devices, Device{ID: p["id"], Name: p["fn"], Model: p["md"], Host: host, Port: int(srv.Port)})
 	}
 	sort.Slice(devices, func(i, j int) bool { return devices[i].Name < devices[j].Name })
-	return devices, nil
+	return devices
 }

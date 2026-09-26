@@ -242,6 +242,28 @@ func (c *Client) SetVolume(ctx context.Context, level float64, muted bool) error
 		quantized = math.Nextafter32(quantized, 0)
 	}
 	level = float64(quantized)
+	// Read back the actual state before writing. Reasserting an unchanged level
+	// can be slow and can clear mute on some receivers.
+	current, err := c.Status(ctx)
+	if err != nil {
+		return err
+	}
+	if current.Volume.Level <= config.MaxReceiverVolume && math.Abs(current.Volume.Level-level) <= 0.00001 {
+		if current.Volume.Muted == muted {
+			return nil
+		}
+		if _, err := c.request(ctx, receiver, receiverNS, map[string]any{"type": "SET_VOLUME", "volume": map[string]any{"muted": muted}}); err != nil {
+			return err
+		}
+		confirmed, err := c.Status(ctx)
+		if err != nil {
+			return err
+		}
+		if !(confirmed.Volume.Level >= 0 && confirmed.Volume.Level <= config.MaxReceiverVolume && confirmed.Volume.Level <= level+0.00001) || confirmed.Volume.Muted != muted {
+			return errors.New("receiver did not confirm requested volume/mute state")
+		}
+		return nil
+	}
 	// Some receivers apply only one volume field per request. Mute first,
 	// then set the level and reassert mute: changing level can clear mute.
 	// Verify both fields before any intentional request to unmute.

@@ -180,38 +180,42 @@ func (s *Service) wait(ctx context.Context, d time.Duration) bool {
 	}
 }
 func (s *Service) session(ctx context.Context, c config.Config) error {
+	started := time.Now()
+	phase := started
+	mark := func(name string) {
+		now := time.Now()
+		slog.Info("connection timing", "phase", name, "duration", now.Sub(phase), "elapsed", now.Sub(started))
+		phase = now
+	}
 	streamConfig := c
 	s.state("connecting", "Connecting muted; verifying the configured receiver volume.")
 	if c.DeviceID != "" {
 		scanCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		devices, err := discovery.Discover(scanCtx)
+		device, err := discovery.Find(scanCtx, c.DeviceID)
 		cancel()
 		if err == nil {
-			for _, d := range devices {
-				if d.ID == c.DeviceID {
-					c.Host = d.Host
-					c.Port = d.Port
-					c.DeviceName = d.Name
-					break
-				}
-			}
+			c.Host, c.Port, c.DeviceName = device.Host, device.Port, device.Name
 		}
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
+	mark("discovery")
 	client, err := cast.Dial(ctx, net.JoinHostPort(c.Host, strconv.Itoa(c.Port)))
 	if err != nil {
 		return err
 	}
 	defer client.Close()
+	mark("connect")
 	if err = client.SetVolume(ctx, c.ReceiverVolume, true); err != nil {
 		return fmt.Errorf("verify muted receiver: %w", err)
 	}
+	mark("initial volume verification")
 	app, err := client.Launch(ctx, c.Codec == "cast-opus")
 	if err != nil {
 		return err
 	}
+	mark("receiver launch")
 	ownedSession := true
 	defer func() {
 		if !ownedSession {
@@ -227,12 +231,14 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 		return fmt.Errorf("verify volume after launch: %w", err)
 	}
 
+	mark("post-launch volume verification")
 	var stream *audio.Stream
 	if c.Codec == "cast-opus" {
 		session, negotiateErr := client.NegotiateAudio(ctx, app, c.Bitrate, c.TargetDelayMS)
 		if negotiateErr != nil {
 			return negotiateErr
 		}
+		mark("stream negotiation")
 		stream, err = audio.NewRealtime(ctx, c, client.LocalIP(), client.RemoteIP(), session)
 	} else {
 		stream, err = audio.NewStream(ctx, c, client.LocalIP(), client.RemoteIP())
@@ -249,6 +255,7 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 			return fmt.Errorf("load audio: %w", err)
 		}
 	}
+	mark("audio pipeline")
 	watchCtx, stopWatch := context.WithCancel(ctx)
 	defer stopWatch()
 	states, err := audio.WatchSink(watchCtx)
@@ -267,6 +274,7 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 		return fmt.Errorf("verify playback volume: %w", err)
 	}
 	stream.Allowed.Store(!native.Muted)
+	mark("playback volume verification")
 
 	s.state("streaming", "Connected. Select Shoutout in KDE's audio output menu.")
 	ticker := time.NewTicker(time.Second)
