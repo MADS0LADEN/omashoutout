@@ -2,12 +2,14 @@
 
 ## Scope and priorities
 
-1. Minimize measured delay from an application writing audio to sound at the receiver.
-2. Expose a normal output named Shoutout in KDE's audio selector.
-3. Select a Google Cast audio destination and configure useful volume scaling for sensitive speakers.
-4. Install and run without a compiler, root daemon, or manual audio-server configuration.
+1. Deliver working playback through a normal output named Shoutout in KDE's audio selector.
+2. Select a Google Cast audio destination and configure useful volume scaling for sensitive speakers.
+3. Provide encoding/buffering presets and install without a compiler, root daemon, or manual audio-server configuration.
+4. Once the functional baseline works, measure and optimize delay from an application writing audio to sound at the receiver.
 
-Initial scope: one configured destination, stereo audio, a user service, CLI diagnostics, and a simple settings window opened from the application menu. Speaker groups follow individual-device validation; group synchronization can introduce additional buffering. The initial test destination is **Lars Kontor**. Primary use is video and games. Direct mDNS discovery identified it as **Chromecast Audio** on 2026-09-26. Firmware and transport capabilities still need verification during feasibility testing.
+Delivery decision: features first, latency optimization later. Initial buffering is acceptable for development and must be described honestly. Keep queues bounded and volume limits enforced from the first version; defer transport comparisons and latency tuning rather than blocking the rest of the application on a latency target.
+
+Initial scope: one configured destination, stereo audio, a user service, CLI diagnostics, and a simple settings window opened from the application menu. Speaker groups follow individual-device validation; group synchronization can introduce additional buffering. The initial test destination is **Lars Kontor**. Primary use is video and games. Direct mDNS discovery identified it as **Chromecast Audio** on 2026-09-26. Firmware and transport capabilities still need verification during playback testing.
 
 ## Host baseline
 
@@ -17,23 +19,23 @@ Inspection on 2026-09-26 found Arch Linux, PipeWire 1.6.9 exposing the PulseAudi
 
 Use Go provisionally. Discovery, Cast control, HTTP streaming, configuration, process supervision, and a user service fit its standard networking and concurrency facilities. Start with a separately supervised system encoder and capture helper so the Go binary does not require native audio or codec bindings. Shipping one application executable still requires packaging its runtime dependencies.
 
-Rust does not inherently lower receiver buffering or codec delay. Reconsider it only if the latency feasibility milestone demonstrates that essential native real-time integration is substantially easier to build and distribute with Rust. Keep allocation-heavy control work outside the PCM processing loop; benchmark the latter before optimizing it.
+Rust does not inherently lower receiver buffering or codec delay. Reconsider it only if later integration work or latency measurements demonstrate that essential native real-time integration is substantially easier to build and distribute with Rust. Keep allocation-heavy control work outside the PCM processing loop; benchmark the latter before optimizing it.
 
-## Latency feasibility comes first
+## Latency optimization follows the functional baseline
 
-For Interactive mode, target p95 end-to-end delay of 100 ms or less as an aspirational engineering goal, not a compatibility claim; even this may be noticeable in games. For Video mode, use 250 ms as the initial uncompensated budget and measure whether player-side video delay is needed. These are provisional design budgets, not user-approved tolerances or demonstrated results. Aim for under 50 ms of host-controlled capture, processing, and queueing overhead, measured separately from receiver delay. These provisional budgets help detect regressions; do not label a multi-second path low latency merely because host overhead is small.
+The following targets guide the later optimization milestone and are not prerequisites for delivering features. For Interactive mode, target p95 end-to-end delay of 100 ms or less as an aspirational engineering goal, not a compatibility claim; even this may be noticeable in games. For Video mode, use 250 ms as the initial uncompensated budget and measure whether player-side video delay is needed. These are provisional design budgets, not user-approved tolerances or demonstrated results. Aim for under 50 ms of host-controlled capture, processing, and queueing overhead, measured separately from receiver delay. These provisional budgets help detect regressions; do not label a multi-second path low latency merely because host overhead is small.
 
 Measure cold-start time, warm-start time, steady-state delay (median and p95), drift after 30 minutes, dropouts, and volume/mute response time. Use at least 30 low-level impulses or a correlation signal per configuration. Capture the source reference and receiver output on a common clock where possible (dual-channel loopback/line-in); otherwise document microphone/acoustic and clock uncertainty. Cast status timestamps and ping time cannot substitute for audible end-to-end measurement. Begin hardware tests muted and ramp a quiet test signal deliberately.
 
-Evaluate transport choices before fixing the architecture:
+For initial playback, start with continuous HTTP MP3 and use segmented delivery if needed for reliable receiver compatibility. Keep transport ownership separate from settings, capture, and Cast control so later changes do not require rebuilding those features. After the functional baseline, compare:
 
 - Continuous HTTP audio: start with MP3, then test receiver-supported AAC and FLAC containers. Verify genuinely unbounded playback, MIME handling, reconnects, and measured buffering; codec support alone does not establish live-stream support.
-- Segmented streaming: evaluate only as a compatibility path, measuring its segment and receiver buffering cost. Do not make it the low-latency default without evidence.
-- Real-time Cast Streaming: investigate audio-only negotiation and actual receiver support early if HTTP misses the goal. Account for session negotiation, codec negotiation, timing, encrypted media transport, receiver feedback, and retransmission; it is a distinct transport, not an HTTP tuning flag.
+- Segmented streaming: measure its segment and receiver buffering cost. It may serve as the initial working transport, but do not label it low latency without evidence.
+- Real-time Cast Streaming: investigate audio-only negotiation and actual receiver support during optimization if HTTP misses the goal. Account for session negotiation, codec negotiation, timing, encrypted media transport, receiver feedback, and retransmission; it is a distinct transport, not an HTTP tuning flag.
 
 Using a custom receiver would add deployment/registration requirements and may not work on the intended audio hardware. Receiver buffering controls exposed to receiver applications are not automatically controllable by a sender using the default receiver. Validate these constraints before committing to that route.
 
-The milestone ends with a measured transport/codec selection for the actual device. If no supported path meets the goal, record the attainable floor and revisit the product tradeoff before spending time on UI polish. Do not silently relax the goal.
+The optimization milestone ends with a measured transport/codec selection for the actual device. If no supported path meets the goal, record the attainable floor and limitations for video/games. Preserve the working feature set and do not silently claim that latency goals were met.
 
 ## Audio and control flow
 
@@ -90,7 +92,7 @@ Store versioned configuration under `$XDG_CONFIG_HOME/shoutout/`, falling back t
 
 Provide planned commands `shoutout devices`, `shoutout configure`, `shoutout status`, `shoutout doctor`, and `shoutout run`. A desktop entry opens a loopback-only settings page served by the Go application, avoiding a GUI toolkit runtime. Protect changes with a local session token and origin checks. Show connection state, destination, volume settings, and measured/estimated latency with clear labels; do not present network RTT as audio latency.
 
-Provide a preset dropdown plus an Advanced panel. Presets select measured transport/codec/buffer combinations and expose their actual latency tradeoffs:
+Provide a preset dropdown plus an Advanced panel during feature development. Initially expose supported encoding/buffering settings and label unmeasured profiles as experimental. Tune presets using measurements in the later optimization milestone; the policies below describe their intended behavior:
 
 | Preset | Policy |
 | --- | --- |
@@ -116,16 +118,16 @@ First-run flow: discover/select destination, choose a preset and conservative vo
 | `internal/service` | Cancellation, reconnect and state transitions |
 | `internal/settings` | Embedded local settings UI |
 
-Start with concrete types and small consumer-owned interfaces at replaceable I/O boundaries. All goroutines and subprocesses need explicit cancellation and cleanup. Do not scaffold unused packages before the feasibility result.
+Start with concrete types and small consumer-owned interfaces at replaceable I/O boundaries. All goroutines and subprocesses need explicit cancellation and cleanup. Add packages as working features require them; do not scaffold unused abstractions for speculative transports.
 
 ## Delivery sequence and acceptance
 
 | Milestone | Deliverable | Exit criteria |
 | --- | --- | --- |
-| 1. Latency feasibility | Disposable sink/capture/transport prototype and measurement report | Actual receiver plays continuously; delay, drift and dropout results recorded; transport decision explains whether target is achievable |
-| 2. Vertical slice | Go daemon, selectable sink, one destination, attenuation, live audio | KDE lists output; per-app routing works; no unexpected routing changes; volume and mute behavior verified at startup and reconnect |
-| 3. Resilience | Discovery, persisted config, session state, bounded queues, diagnostics | Recover from network loss, receiver restart, audio-server restart and suspend without stale audio or volume bursts |
-| 4. Usable installation | Settings UI, desktop entry, user service, packages | Fresh install through packaged dependencies; no compiler; select destination and output using GUI; clean uninstall |
+| 1. Working playback | Go daemon, selectable sink, one destination, attenuation, live audio | Lars Kontor plays continuously; KDE lists output; per-app routing works; volume and mute behavior verified; no latency threshold required |
+| 2. Configuration and resilience | Discovery, destination selection, persisted config, reconnects, bounded queues, diagnostics | Recover from network loss, receiver restart, audio-server restart and suspend without stale audio or volume bursts |
+| 3. Settings and installation | Preset dropdown, advanced encoding/buffering controls, settings UI, desktop entry, user service, packages | Fresh install through packaged dependencies; no compiler; configure destination and volume through GUI; profiles accurately label unmeasured latency; clean uninstall |
+| 4. Latency optimization | End-to-end measurements, tuned buffers/codecs, transport comparison where justified | Record cold/warm startup, median/p95 delay, drift and dropouts on Lars Kontor; tune device presets and report achievable limits |
 | 5. Release validation | CI, signed/checksummed artifacts and compatibility matrix | Repeatable clean builds; hardware/distro results published; known latency limits explicit |
 
 ## Packaging and validation
