@@ -13,6 +13,8 @@ import (
 )
 
 const SinkName = "omashoutout"
+const ownerMarker = "omashoutout.owner=omashoutout"
+const legacyOwnerMarker = "shoutout.owner=shoutout"
 
 type Sink struct{ module string }
 type SinkState struct {
@@ -61,24 +63,12 @@ func SetMuted(ctx context.Context, muted bool) error {
 	return err
 }
 func NewSink(ctx context.Context) (*Sink, error) {
-	b, err := pactl(ctx, "--format=json", "list", "modules")
-	if err != nil {
+	if id, ok, err := moduleID(ctx, ownerMarker); err != nil {
 		return nil, err
+	} else if ok {
+		return &Sink{module: id}, nil
 	}
-	var modules []struct {
-		Index    int    `json:"index"`
-		Name     string `json:"name"`
-		Argument string `json:"argument"`
-	}
-	if err = json.Unmarshal(b, &modules); err != nil {
-		return nil, err
-	}
-	for _, m := range modules {
-		if m.Name == "module-null-sink" && strings.Contains(m.Argument, "omashoutout.owner=omashoutout") {
-			return &Sink{module: strconv.Itoa(m.Index)}, nil
-		}
-	}
-	b, err = pactl(ctx, "load-module", "module-null-sink", "sink_name="+SinkName, "rate=48000", "channels=2", "format=float32le", `sink_properties=device.description="Omashoutout" device.icon_name="audio-speakers" omashoutout.owner=omashoutout priority.session=1`)
+	b, err := pactl(ctx, "load-module", "module-null-sink", "sink_name="+SinkName, "rate=48000", "channels=2", "format=float32le", `sink_properties=device.description="Omashoutout" device.icon_name="audio-speakers" omashoutout.owner=omashoutout priority.session=1`)
 	if err != nil {
 		return nil, err
 	}
@@ -102,26 +92,46 @@ func (s *Sink) Close() error {
 // RemoveSink is used by uninstall, not ordinary service restarts. Keeping the
 // device prevents applications jumping to loud hardware during reconnection.
 func RemoveSink(ctx context.Context) error {
-	b, err := pactl(ctx, "--format=json", "list", "modules")
-	if err != nil {
-		return err
-	}
-	var modules []struct {
-		Index    int    `json:"index"`
-		Name     string `json:"name"`
-		Argument string `json:"argument"`
-	}
-	if err = json.Unmarshal(b, &modules); err != nil {
-		return err
-	}
-	for _, m := range modules {
-		if m.Name == "module-null-sink" && strings.Contains(m.Argument, "omashoutout.owner=omashoutout") {
-			if _, err = pactl(ctx, "unload-module", strconv.Itoa(m.Index)); err != nil {
-				return err
-			}
+	for _, marker := range []string{ownerMarker, legacyOwnerMarker} {
+		id, ok, err := moduleID(ctx, marker)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		if _, err = pactl(ctx, "unload-module", id); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func moduleID(ctx context.Context, marker string) (string, bool, error) {
+	b, err := pactl(ctx, "list", "short", "modules")
+	if err != nil {
+		return "", false, err
+	}
+	id, ok := moduleIDFromShortList(string(b), marker)
+	return id, ok, nil
+}
+
+func moduleIDFromShortList(text, marker string) (string, bool) {
+	for _, line := range strings.Split(text, "\n") {
+		id, rest, ok := strings.Cut(strings.TrimSpace(line), "\t")
+		if !ok {
+			continue
+		}
+		name, arg, ok := strings.Cut(rest, "\t")
+		if !ok || name != "module-null-sink" || !strings.Contains(arg, marker) {
+			continue
+		}
+		if _, err := strconv.ParseUint(id, 10, 32); err != nil {
+			continue
+		}
+		return id, true
+	}
+	return "", false
 }
 
 // WatchSink follows the mute and volume state the desktop shows.

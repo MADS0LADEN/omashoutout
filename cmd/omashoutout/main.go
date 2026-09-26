@@ -396,23 +396,36 @@ func installOmarchyPlugin(confDir string) error {
 	if err := omarchy.InstallDir(pluginDir); err != nil {
 		return err
 	}
-	cmd := exec.Command("omarchy-shell", "shell", "rescanPlugins")
-	cmd.Env = omarchyShellEnv()
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-	if !omarchyPluginInShellJSON(filepath.Join(confDir, "omarchy", "shell.json"), omarchyPluginID) {
-		cmd = exec.Command("omarchy", "plugin", "enable", omarchyPluginID, "--section", "right")
+	shellJSON := filepath.Join(confDir, "omarchy", "shell.json")
+	var last error
+	for attempt := 0; attempt < 4; attempt++ {
+		if attempt > 0 {
+			time.Sleep(2 * time.Second)
+		}
+		cmd := exec.Command("omarchy-shell", "shell", "rescanPlugins")
 		cmd.Env = omarchyShellEnv()
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			return err
 		}
+		if omarchyPluginInShellJSON(shellJSON, omarchyPluginID) {
+			return nil
+		}
+		cmd = exec.Command("omarchy", "plugin", "enable", omarchyPluginID, "--section", "right")
+		cmd.Env = omarchyShellEnv()
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			last = err
+			continue
+		}
+		return nil
 	}
-	return nil
+	if last != nil {
+		return last
+	}
+	return errors.New("Omarchy did not enable the settings plugin")
 }
 
 func omarchyPluginInShellJSON(path, pluginID string) bool {
