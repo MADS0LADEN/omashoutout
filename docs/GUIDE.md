@@ -2,7 +2,7 @@
 
 ## Install
 
-For Arch Linux, the [PKGBUILD](../packaging/arch/README.md) installs system-wide, including the native KDE module. The instructions below describe the alternative per-user installation.
+For Arch Linux, the [PKGBUILD](ARCH.md) installs system-wide, including the native KDE module. The instructions below describe the alternative per-user installation.
 
 Requires a KDE Plasma 6 desktop, a systemd user session, PipeWire's PulseAudio compatibility service, `pactl`, `parec`, and FFmpeg with AAC, MP3 and `libopus` encoders. Building also requires Go (see `go.mod`), CMake, Ninja, a C++20 compiler, Qt6 Widgets and Network, and KDE Frameworks 6 KCMUtils and CoreAddons development files. Arch is the current development platform; other distributions need validation.
 

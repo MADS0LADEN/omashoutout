@@ -19,9 +19,9 @@ Receiver targets are buffer settings, not total audible latency. Playback is tes
 
 ## Get started
 
-For **KDE Plasma 6 + PipeWire**. Build from source with Go, FFmpeg and the Qt6/KDE development libraries; see [requirements and installation details](docs/GUIDE.md).
+For **KDE Plasma 6 + PipeWire**. Build from source with Go, FFmpeg and the Qt6/KDE development libraries; see [requirements and installation details](GUIDE.md).
 
-On Arch Linux, use the [system-wide package](packaging/arch/README.md):
+On Arch Linux, use the [system-wide package](ARCH.md):
 
 ```sh
 makepkg -si
@@ -38,8 +38,8 @@ shoutout configure
 
 Choose your speaker, select **ShoutOut** as your KDE audio output, and unmute. Start with a low volume scale for sensitive speakers.
 
-The settings page opens immediately through `shoutout configure`. Log out and back in to make it discoverable through the normal System Settings launcher.
+The settings page opens immediately through `shoutout configure`. Per-user source installs need a new login for discovery through the normal System Settings launcher. Arch packages are discoverable immediately.
 
-[Usage & troubleshooting](docs/GUIDE.md) · [Development plan](docs/PLAN.md) · [Validation](docs/VALIDATION.md)
+[Usage & troubleshooting](GUIDE.md) · [Development plan](PLAN.md) · [Validation](VALIDATION.md)
 
-[MIT licensed](LICENSE). [Third-party notices](licenses/README.md).
+[MIT licensed](../LICENSE). [Third-party notices](DEPENDENCIES.md).

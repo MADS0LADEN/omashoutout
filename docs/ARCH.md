@@ -10,7 +10,7 @@ makepkg -si
 shoutout configure
 ```
 
-The root [PKGBUILD](../../PKGBUILD) builds `shoutout-git`. It installs:
+The root [PKGBUILD](../PKGBUILD) builds `shoutout-git`. It installs:
 
 - `/usr/bin/shoutout`
 - The native KDE module under `/usr/lib/qt6/plugins/`
