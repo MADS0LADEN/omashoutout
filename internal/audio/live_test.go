@@ -28,6 +28,7 @@ func TestLiveStream(t *testing.T) {
 	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
 	t.Setenv("XDG_RUNTIME_DIR", dir)
 	c := config.Default()
+	c.Codec = "aac-hls"
 	c.MediaPort = 0
 	c.SegmentMS = 250
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

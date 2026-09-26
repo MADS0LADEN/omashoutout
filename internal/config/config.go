@@ -29,7 +29,7 @@ type Config struct {
 }
 
 func Default() Config {
-	return Config{TargetDelayMS: 400, Codec: "aac-hls", SegmentMS: 500, Enabled: true, Version: 1, Port: 8009, ReceiverVolume: 0.01, Preset: "video", Bitrate: 192, MediaPort: 17833}
+	return Config{TargetDelayMS: 100, Codec: "cast-opus", SegmentMS: 500, Enabled: true, Version: 1, Port: 8009, ReceiverVolume: 0.01, Preset: "balanced", Bitrate: 192, MediaPort: 17833}
 }
 
 func (c Config) Validate() error {
@@ -52,7 +52,7 @@ func (c Config) Validate() error {
 		return errors.New("receiver volume must be between 0 and 100%")
 	}
 	switch c.Preset {
-	case "interactive", "video", "music", "custom":
+	case "low-latency", "balanced", "high-quality", "custom", "interactive", "video", "music":
 	default:
 		return errors.New("unknown preset")
 	}
@@ -96,6 +96,11 @@ func Load(path string) (Config, error) {
 	}
 	if err = json.Unmarshal(b, &c); err != nil {
 		return c, fmt.Errorf("read settings: %w", err)
+	}
+	switch c.Preset {
+	case "interactive", "video", "music":
+		// Keep existing transport values; old labels do not match new presets.
+		c.Preset = "custom"
 	}
 	return c, c.Validate()
 }

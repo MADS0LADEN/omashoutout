@@ -87,3 +87,23 @@ func TestRemovedSettingsMigration(t *testing.T) {
 		t.Fatal("obsolete settings retained")
 	}
 }
+
+func TestLegacyPresetKeepsPlaybackSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	c := Default()
+	c.Preset = "music"
+	c.Codec = "aac-hls"
+	c.SegmentMS = 1000
+	c.Bitrate = 320
+	if err := Save(path, c); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Preset = "custom"
+	if got != c {
+		t.Fatalf("migration changed playback: %+v", got)
+	}
+}

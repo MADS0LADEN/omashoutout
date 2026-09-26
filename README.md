@@ -2,11 +2,11 @@
 
 A Linux virtual audio output that sends desktop audio to a Google Cast audio device. Select **Shoutout** in KDE's normal output selector. Configure the destination, encoding, buffering and volume scale in the native **ShoutOut** System Settings module.
 
-Playback is confirmed on a Chromecast Audio. **Cast Streaming / Opus** now produces audible audio with noticeably less delay than HTTP delivery. The test receiver reports the user's selected **60 ms playback buffer**; actual end-to-end latency remains unmeasured. AAC live segments remain the default compatibility mode (roughly two seconds in an earlier listening test), while continuous MP3 exhibited roughly 30 seconds. No automatic video synchronization is provided.
+Playback is confirmed on a Chromecast Audio. **Cast Streaming / Opus** now produces audible audio with noticeably less delay than HTTP delivery. The test receiver reports the user's selected **60 ms playback buffer**; actual end-to-end latency remains unmeasured. Balanced uses Opus by default. AAC live segments provide a compatibility option (roughly two seconds in an earlier listening test), while continuous MP3 exhibited roughly 30 seconds. No automatic video synchronization is provided.
 
 ## Install
 
-Requires a KDE Plasma 6 desktop, a systemd user session, PipeWire's PulseAudio compatibility service, `pactl`, `parec`, and FFmpeg with AAC, MP3 and `libopus` encoders. Building also requires Go (see `go.mod`), CMake, Ninja, a C++20 compiler, Qt6 Widgets, and KDE Frameworks 6 KCMUtils and CoreAddons development files. Arch is the current development platform; other distributions need validation.
+Requires a KDE Plasma 6 desktop, a systemd user session, PipeWire's PulseAudio compatibility service, `pactl`, `parec`, and FFmpeg with AAC, MP3 and `libopus` encoders. Building also requires Go (see `go.mod`), CMake, Ninja, a C++20 compiler, Qt6 Widgets and Network, and KDE Frameworks 6 KCMUtils and CoreAddons development files. Arch is the current development platform; other distributions need validation.
 
 ```sh
 make build kde
@@ -27,9 +27,9 @@ Choose a detected receiver or enter `address:port` (for example `192.168.1.10:80
 - KDE's normal output slider and mute are authoritative. Internal capture is marked virtual so it does not appear as an application in KDE's mixer.
 - Receiver volume scale is configurable from **0–100%**. Keep it low for sensitive speakers. The 5% maximum applies only to development speaker tests.
 - Native volume changes apply to captured audio, so their audible effect includes stream delay. Native mute also sends a receiver mute command without restarting playback.
-- Encoding choices are **Cast Streaming / Opus (experimental)**, AAC live segments and continuous MP3. Cast Streaming sends encrypted, paced 20 ms Opus frames over UDP, with receiver feedback and bounded retransmission. Its target-delay control accepts 40–1000 ms; the initial target is 400 ms. This is a requested receiver buffer, not measured end-to-end latency. Select AAC manually if the receiver does not support this mode.
+- Encoding choices are **Cast Streaming / Opus (experimental)**, and AAC live segments. Existing MP3 configurations remain supported as a legacy option. Cast Streaming sends encrypted, paced 20 ms Opus frames over UDP, with receiver feedback and bounded retransmission. Its target-delay control accepts 40–1000 ms; the Balanced target is 100 ms. This is a requested receiver buffer, not measured end-to-end latency. Select AAC manually if the receiver does not support this mode.
 - For AAC, live segment duration is configurable from 250–2000 ms. The live playlist holds six segments; receiver buffering is additional. MP3 can have very high receiver delay.
-- Interactive, Video and Music presets select progressively longer AAC segments and encoding bitrates. These presets use AAC delivery. Select Cast Streaming explicitly to configure its target delay. Preset names describe intent, not measured latency guarantees. Custom settings are supported.
+- **Low latency** selects Opus at 128 kbps with a 40 ms receiver target. **Balanced** (the new-install default) selects Opus at 192 kbps with a 100 ms target. **High quality** selects AAC at 320 kbps with 500 ms segments. These durations are protocol settings, not measured audible latency. Editing encoding, bitrate or buffering selects Custom. Existing configurations retain their transport settings.
 - Volume scale applies to the running session without reconnecting. Volume changes during unmuted playback avoid a mute cycle. Numeric controls accompany sliders for scale, segment length and target delay.
 - Capture batching and transport queues are managed internally. There is no separate host-buffer or attenuation setting.
 - Applying destination, encoding, segment-length or target-delay changes restarts the stream. The sink and desktop routing remain in place. Another controller taking over the receiver stops automatic reconnection; apply settings to reclaim it deliberately.

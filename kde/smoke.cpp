@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     auto codec = w->findChild<QComboBox *>("codec");
     auto segment = w->findChild<QSpinBox *>("segmentMS");
     if (w->findChild<QPushButton *>("discover") || !codec ||
-        codec->count() != 3 || !segment || segment->minimum() != 250 ||
+        codec->count() != 2 || !segment || segment->minimum() != 250 ||
         segment->maximum() != 2000 || !scale || scale->maximum() != 100 ||
         !devices || devices->count() < 2 || devices->width() < 300 || !status ||
         status->text().isEmpty()) {
@@ -60,6 +60,29 @@ int main(int argc, char **argv) {
       fprintf(stderr, "Missing native sliders\n");
       app.exit(1);
       return;
+    }
+    auto preset = w->findChild<QComboBox *>("preset");
+    auto delay = w->findChild<QSpinBox *>("targetDelayMS");
+    auto bitrate = w->findChild<QComboBox *>("bitrate");
+    if (!preset || preset->count() != 4 || !delay || !bitrate) {
+      app.exit(1);
+      return;
+    }
+    for (int i = 0; i < 3; ++i) {
+      preset->setCurrentIndex(i);
+      QMetaObject::invokeMethod(preset, "activated", Qt::DirectConnection,
+                                Q_ARG(int, i));
+      if (codec->currentData().toString() !=
+              (i == 2 ? "aac-hls" : "cast-opus") ||
+          bitrate->currentData().toInt() != (i == 0   ? 128
+                                             : i == 1 ? 192
+                                                      : 320) ||
+          (i < 2 && delay->value() != (i == 0 ? 40 : 100)) ||
+          (i == 2 && segment->value() != 500)) {
+        fprintf(stderr, "Preset mapping failed\n");
+        app.exit(1);
+        return;
+      }
     }
     double previous = scale->value();
     volumeSlider->setValue(31);

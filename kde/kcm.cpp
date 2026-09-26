@@ -60,14 +60,15 @@ public:
                  sliderRow(scale));
     preset = new QComboBox(widget());
     preset->setObjectName("preset");
-    for (const auto &p : {"Interactive", "Video", "Music", "Custom"})
-      preset->addItem(tr(p), QString(p).toLower());
+    preset->addItem(tr("Low latency"), "low-latency");
+    preset->addItem(tr("Balanced"), "balanced");
+    preset->addItem(tr("High quality"), "high-quality");
+    preset->addItem(tr("Custom"), "custom");
     form->addRow(tr("Playback preset:"), preset);
     codec = new QComboBox(widget());
     codec->setObjectName("codec");
     codec->addItem(tr("AAC live segments"), "aac-hls");
     codec->addItem(tr("Cast Streaming / Opus (experimental)"), "cast-opus");
-    codec->addItem(tr("MP3 continuous (high receiver delay)"), "mp3");
     form->addRow(tr("Encoding / delivery:"), codec);
     segment = new QSpinBox(widget());
     segment->setObjectName("segmentMS");
@@ -150,21 +151,22 @@ public:
     connect(preset, &QComboBox::activated, this, [this](int i) {
       loading = true;
       if (i < 3) {
-        codec->setCurrentIndex(0);
-        segment->parentWidget()->setEnabled(true);
-        delay->parentWidget()->setEnabled(false);
+        codec->setCurrentIndex(
+            codec->findData(i == 2 ? "aac-hls" : "cast-opus"));
+        segment->parentWidget()->setEnabled(i == 2);
+        delay->parentWidget()->setEnabled(i != 2);
       }
       if (i == 0) {
-        bitrate->setCurrentIndex(0);
-        segment->setValue(250);
+        bitrate->setCurrentIndex(bitrate->findData(128));
+        delay->setValue(40);
       }
       if (i == 1) {
-        bitrate->setCurrentIndex(1);
-        segment->setValue(500);
+        bitrate->setCurrentIndex(bitrate->findData(192));
+        delay->setValue(100);
       }
       if (i == 2) {
-        bitrate->setCurrentIndex(3);
-        segment->setValue(1000);
+        bitrate->setCurrentIndex(bitrate->findData(320));
+        segment->setValue(500);
       }
       loading = false;
       markAsChanged();
@@ -239,13 +241,13 @@ public:
   void defaults() override {
     scale->setValue(1);
     loading = true;
-    codec->setCurrentIndex(0);
-    segment->parentWidget()->setEnabled(true);
-    delay->parentWidget()->setEnabled(false);
+    codec->setCurrentIndex(codec->findData("cast-opus"));
+    segment->parentWidget()->setEnabled(false);
+    delay->parentWidget()->setEnabled(true);
     preset->setCurrentIndex(1);
     bitrate->setCurrentIndex(1);
     segment->setValue(500);
-    delay->setValue(400);
+    delay->setValue(100);
     loading = false;
     enabled->setChecked(true);
     markAsChanged();
@@ -337,6 +339,8 @@ private:
   }
   void fill() {
     loading = true;
+    if (config["codec"].toString() == "mp3" && codec->findData("mp3") < 0)
+      codec->addItem(tr("MP3 (legacy configuration)"), "mp3");
     codec->setCurrentIndex(codec->findData(config["codec"].toString()));
     segment->setValue(config["segment_ms"].toInt(500));
     delay->setValue(config["target_delay_ms"].toInt(400));
@@ -345,7 +349,8 @@ private:
     host->setText(
         endpoint(config["host"].toString(), config["port"].toInt(8009)));
     scale->setValue(config["receiver_volume"].toDouble() * 100);
-    preset->setCurrentIndex(preset->findData(config["preset"].toString()));
+    int presetIndex = preset->findData(config["preset"].toString());
+    preset->setCurrentIndex(presetIndex < 0 ? 3 : presetIndex);
     bitrate->setCurrentIndex(bitrate->findData(config["bitrate_kbps"].toInt()));
     enabled->setChecked(config["enabled"].toBool());
     updateDevices();

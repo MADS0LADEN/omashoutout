@@ -67,3 +67,13 @@ with an open subscription. The native smoke check received five live devices
 without a discovery button and verified the combined address:port field. The
 installed service remained streaming with the existing user settings. Physical
 device disconnection was not exercised; expiry uses synthetic DNS records in tests.
+
+## Playback presets
+
+The native smoke check activates each preset without saving or changing speaker
+playback: Low latency selects Opus/128 kbps/40 ms, Balanced selects
+Opus/192 kbps/100 ms, and High quality selects AAC/320 kbps/500 ms segments.
+New configurations default to Balanced. A configuration migration test verifies
+that old preset names become Custom without altering their playback parameters.
+The normal encoding selector contains Opus and AAC; a legacy MP3 configuration
+retains its entry when loaded. Go race tests and vet passed.
