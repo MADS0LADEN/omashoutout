@@ -64,7 +64,8 @@ int main(int argc, char **argv) {
     auto preset = w->findChild<QComboBox *>("preset");
     auto delay = w->findChild<QSpinBox *>("targetDelayMS");
     auto bitrate = w->findChild<QComboBox *>("bitrate");
-    if (!preset || preset->count() != 4 || !delay || !bitrate) {
+    if (!preset || preset->count() != 4 || !delay || !bitrate || delay->minimum() != 20 ||
+        delay->singleStep() != 10) {
       app.exit(1);
       return;
     }

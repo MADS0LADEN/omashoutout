@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-const audioFrameDuration = 20 * time.Millisecond
-const audioFrameSamples = 960
 const packetPayload = 1100
 
 type TransportStats struct {
@@ -68,7 +66,7 @@ func frameCipher(block cipher.Block, mask [16]byte, id uint32, plain []byte) []b
 	return result
 }
 
-func audioPackets(ssrc, frame uint32, sequence *uint16, encrypted []byte) [][]byte {
+func audioPackets(ssrc, frame uint32, sequence *uint16, samples uint32, encrypted []byte) [][]byte {
 	count := max(1, (len(encrypted)+packetPayload-1)/packetPayload)
 	packets := make([][]byte, 0, count)
 	for i := 0; i < count; i++ {
@@ -81,7 +79,7 @@ func audioPackets(ssrc, frame uint32, sequence *uint16, encrypted []byte) [][]by
 		}
 		binary.BigEndian.PutUint16(p[2:4], *sequence)
 		*sequence++
-		binary.BigEndian.PutUint32(p[4:8], frame*audioFrameSamples)
+		binary.BigEndian.PutUint32(p[4:8], frame*samples)
 		binary.BigEndian.PutUint32(p[8:12], ssrc)
 		p[12] = 0xc0
 		p[13] = byte(frame)
@@ -99,11 +97,12 @@ func (t *Transport) SendFrame(ctx context.Context, opus []byte) error {
 	if len(opus) == 0 || len(opus) > 8192 {
 		return errors.New("invalid Opus frame length")
 	}
+	frameDuration := time.Duration(t.session.FrameDurationMS()) * time.Millisecond
 	t.mu.Lock()
 	if t.epoch.IsZero() {
-		t.epoch = time.Now().Add(-audioFrameDuration)
+		t.epoch = time.Now().Add(-frameDuration)
 	}
-	due := t.epoch.Add(time.Duration(t.next+1) * audioFrameDuration)
+	due := t.epoch.Add(time.Duration(t.next+1) * frameDuration)
 	t.mu.Unlock()
 	if wait := time.Until(due); wait > 0 {
 		timer := time.NewTimer(wait)
@@ -119,7 +118,7 @@ func (t *Transport) SendFrame(ctx context.Context, opus []byte) error {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if int64(t.next)-t.stats.Acknowledged > int64(min(120, max(25, t.session.DelayMS/20+25))) {
+	if int64(t.next)-t.stats.Acknowledged > int64(min(120, max(25, t.session.DelayMS/t.session.FrameDurationMS()+25))) {
 		return errors.New("receiver acknowledgement stalled; discard stale audio")
 	}
 	if t.next == ^uint32(0) {
@@ -132,7 +131,7 @@ func (t *Transport) SendFrame(ctx context.Context, opus []byte) error {
 		}
 	}
 	encrypted := frameCipher(t.cipher, t.session.IV, t.next, opus)
-	packets := audioPackets(t.session.SenderSSRC, t.next, &t.sequence, encrypted)
+	packets := audioPackets(t.session.SenderSSRC, t.next, &t.sequence, uint32(t.session.FrameDurationMS()*48), encrypted)
 	for _, p := range packets {
 		if err := t.writePacket(p, false); err != nil {
 			return err

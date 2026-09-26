@@ -281,7 +281,11 @@ func boundPCM(b []byte, gain float64) float64 {
 }
 
 func (s *Stream) process(in io.Reader, out io.Writer) error {
-	buf := make([]byte, 3840)
+	chunk := 3840
+	if s.realtime != nil {
+		chunk = 1920
+	}
+	buf := make([]byte, chunk)
 	ramp := 0.0
 	for {
 		n, err := io.ReadFull(in, buf)
@@ -290,7 +294,7 @@ func (s *Stream) process(in io.Reader, out io.Writer) error {
 		}
 		factor := 0.0
 		if s.Allowed.Load() {
-			ramp = math.Min(1, ramp+0.05)
+			ramp = math.Min(1, ramp+0.05*float64(chunk)/3840)
 			factor = ramp
 		} else {
 			ramp = 0

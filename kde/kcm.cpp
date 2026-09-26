@@ -78,8 +78,8 @@ public:
     form->addRow(tr("Live segment length:"), sliderRow(segment));
     delay = new QSpinBox(widget());
     delay->setObjectName("targetDelayMS");
-    delay->setRange(40, 1000);
-    delay->setSingleStep(20);
+    delay->setRange(20, 1000);
+    delay->setSingleStep(10);
     delay->setSuffix(tr(" ms"));
     delay->setToolTip(
         tr("Requested receiver playback delay. Actual audible delay also "

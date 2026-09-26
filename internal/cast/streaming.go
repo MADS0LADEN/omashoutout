@@ -66,3 +66,15 @@ func (c *Client) NegotiateAudio(ctx context.Context, app Application, bitrate, d
 	s.ReceiverSSRC = a.SSRCs[0]
 	return s, nil
 }
+
+// FrameDurationMS keeps frame collection within one quarter of the requested
+// playback budget, using supported whole-millisecond Opus frame durations.
+func (s StreamingSession) FrameDurationMS() int {
+	if s.DelayMS < 40 {
+		return 5
+	}
+	if s.DelayMS < 80 {
+		return 10
+	}
+	return 20
+}

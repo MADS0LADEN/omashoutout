@@ -13,7 +13,7 @@ import (
 	"github.com/lkarlslund/shoutout/internal/config"
 )
 
-const realtimeCaptureLatencyMS = 10
+const realtimeCaptureLatencyMS = 5
 
 // NewRealtime starts capture only after the receiver has negotiated its UDP
 // endpoint. PCM stays gated until the service verifies the receiver volume.
@@ -43,7 +43,7 @@ func NewRealtime(parent context.Context, c config.Config, localIP, remoteIP stri
 	if err != nil {
 		return nil, err
 	}
-	s.encoder = exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-loglevel", "error", "-probesize", "32", "-analyzeduration", "0", "-f", "wav", "-max_size", "3840", "-ignore_length", "1", "-i", "pipe:0", "-c:a", "libopus", "-application", "lowdelay", "-frame_duration", "20", "-b:a", strconv.Itoa(c.Bitrate)+"k", "-vbr", "off", "-f", "ogg", "-page_duration", "20000", "-flush_packets", "1", "pipe:1")
+	s.encoder = exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-loglevel", "error", "-probesize", "32", "-analyzeduration", "0", "-f", "wav", "-max_size", "1920", "-ignore_length", "1", "-i", "pipe:0", "-c:a", "libopus", "-application", "lowdelay", "-frame_duration", strconv.Itoa(session.FrameDurationMS()), "-b:a", strconv.Itoa(c.Bitrate)+"k", "-vbr", "off", "-f", "ogg", "-page_duration", strconv.Itoa(session.FrameDurationMS()*1000), "-flush_packets", "1", "pipe:1")
 	input, err := s.encoder.StdinPipe()
 	if err != nil {
 		captured.Close()
@@ -61,7 +61,7 @@ func NewRealtime(parent context.Context, c config.Config, localIP, remoteIP stri
 		output.Close()
 		return nil, fmt.Errorf("start Opus encoder: %w", err)
 	}
-	// Bound the demuxer's input packets to 10 ms. Raw PCM input can collect
+	// Bound the demuxer's input packets to 5 ms. Raw PCM input can collect
 	// much larger batches even when the encoder emits short Opus frames.
 	if err = writeFloatPCMHeader(input); err != nil {
 		captured.Close()
@@ -78,6 +78,9 @@ func NewRealtime(parent context.Context, c config.Config, localIP, remoteIP stri
 	go func() {
 		defer s.wg.Done()
 		s.report(readOpus(output, func(packet []byte) error {
+			if opusSamples(packet) != session.FrameDurationMS()*48 {
+				return errors.New("unexpected Opus frame duration")
+			}
 			if err := transport.SendFrame(ctx, packet); err != nil {
 				return err
 			}
@@ -152,8 +155,9 @@ func readOpus(r io.Reader, consume func([]byte) error) error {
 				}
 				headers++
 			default:
-				if opusSamples(pending) != 960 {
-					return errors.New("encoder must produce 20 ms Opus frames")
+				samples := opusSamples(pending)
+				if samples != 240 && samples != 480 && samples != 960 {
+					return errors.New("encoder must produce 5, 10 or 20 ms Opus frames")
 				}
 				if err := consume(pending); err != nil {
 					return err

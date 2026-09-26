@@ -22,7 +22,7 @@ Agent-run hardware tests started muted at 1%, then used 3%, below the absolute 5
 - The user confirms audible playback and a noticeable reduction in delay compared with HTTP audio.
 - Agent-run hardware setup started muted at 1%, then used 3% receiver volume. The user subsequently adjusted settings; later validation was read-only and preserved those choices. The service remains controlled by native KDE gain/mute.
 - Tests exercise AES-CTR against a known vector, packet fragmentation, frame-ID wraparound, RTCP bounds checking, stale feedback rejection, packet retransmission and sender clock mapping. A loopback synthetic test runs the actual encoder, decrypts received packets and sends simulated acknowledgements without contacting speakers.
-- Native settings include transport selection and a 40–1000 ms target-delay control. Existing AAC presets remain available; selecting a different transport is explicit.
+- Native settings include transport selection and a 20–1000 ms target-delay control. Existing AAC presets remain available; selecting a different transport is explicit.
 - Volume-only updates preserve the active session. Protocol tests verify unmuted volume changes send only a level update and status query, without mute/stop/launch commands.
 - Native sliders cover receiver scale, segment duration and target delay, with synchronized numeric inputs.
 - Attenuation and host-buffer fields have been removed from settings and configuration; legacy saved fields are ignored on load and disappear on save. Capture batching is managed internally.
@@ -116,3 +116,25 @@ passes on the updated one. Full Go race tests and vet pass.
 
 These changes have not yet been acoustically measured or hardware-tested on a
 receiver. The installed service and the user's speaker settings were unchanged.
+
+
+## Shorter Opus frames
+
+Frame duration now follows the receiver target: 5 ms below 40 ms, 10 ms
+below 80 ms, and 20 ms otherwise. Capture requests and WAV input packets are
+5 ms; the PCM gate also processes 5 ms batches while preserving fade duration.
+RTP timestamps, pacing and the acknowledgement window use the selected frame
+duration. KDE permits custom targets from 20 ms, in 10 ms steps. Preset targets
+remain unchanged.
+
+Silent receiver tests accepted 5 and 10 ms frames. A 20-second synthetic capture
+through the real encoder and UDP transport to Køkkenet, muted at verified 1%,
+sent 3,995 frames at a 20 ms target using 5 ms frames. Receiver events reported
+zero late frames and transport reported zero retransmissions. Median receiver
+arrival-to-playout-event time was 14 ms. This excludes host capture/encoding and
+network time; it is not an acoustic measurement or a long-duration stability
+claim. Desktop capture scheduling under load still needs real-world evaluation.
+
+Automated tests exercise encrypted 5, 10 and 20 ms frames and matching RTP
+timestamps. A regression test supplies only 15 ms of PCM and requires output
+without closing the input. Race tests, vet and native KDE build pass.

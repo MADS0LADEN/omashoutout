@@ -36,8 +36,8 @@ func (c Config) Validate() error {
 	if c.Codec != "aac-hls" && c.Codec != "mp3" && c.Codec != "cast-opus" {
 		return errors.New("codec must be cast-opus, aac-hls or mp3")
 	}
-	if c.TargetDelayMS < 40 || c.TargetDelayMS > 1000 {
-		return errors.New("target playback delay must be between 40 and 1000 ms")
+	if c.TargetDelayMS < 20 || c.TargetDelayMS > 1000 {
+		return errors.New("target playback delay must be between 20 and 1000 ms")
 	}
 	if c.SegmentMS < 250 || c.SegmentMS > 2000 {
 		return errors.New("live segment length must be between 250 and 2000 ms")

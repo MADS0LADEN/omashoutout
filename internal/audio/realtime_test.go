@@ -6,6 +6,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -20,6 +21,13 @@ import (
 )
 
 func TestRealtimeSyntheticAudio(t *testing.T) {
+	for _, target := range []int{20, 40, 100} {
+		t.Run(fmt.Sprint(target), func(t *testing.T) {
+			testRealtimeSyntheticAudio(t, target)
+		})
+	}
+}
+func testRealtimeSyntheticAudio(t *testing.T, target int) {
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		t.Skip("FFmpeg not installed")
@@ -41,7 +49,7 @@ func TestRealtimeSyntheticAudio(t *testing.T) {
 	defer receiver.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	session := cast.StreamingSession{SenderSSRC: 42, ReceiverSSRC: 43, Port: receiver.LocalAddr().(*net.UDPAddr).Port, DelayMS: 400}
+	session := cast.StreamingSession{SenderSSRC: 42, ReceiverSSRC: 43, Port: receiver.LocalAddr().(*net.UDPAddr).Port, DelayMS: target}
 	s, err := NewRealtime(ctx, config.Default(), "127.0.0.1", "127.0.0.1", session)
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +82,10 @@ func TestRealtimeSyntheticAudio(t *testing.T) {
 		binary.BigEndian.PutUint32(iv[8:12], uint32(p[13]))
 		plain := make([]byte, n-19)
 		cipher.NewCTR(block, iv[:]).XORKeyStream(plain, p[19:])
-		if opusSamples(plain) != 960 {
+		if binary.BigEndian.Uint32(p[4:8]) != uint32(frames*session.FrameDurationMS()*48) {
+			t.Fatal("RTP timestamp does not match encoded duration")
+		}
+		if opusSamples(plain) != session.FrameDurationMS()*48 {
 			t.Fatal("invalid encrypted Opus frame")
 		}
 		ack := make([]byte, 20)
@@ -85,7 +96,7 @@ func TestRealtimeSyntheticAudio(t *testing.T) {
 		binary.BigEndian.PutUint32(ack[8:12], 42)
 		copy(ack[12:], "CAST")
 		ack[16] = p[13]
-		binary.BigEndian.PutUint16(ack[18:], 400)
+		binary.BigEndian.PutUint16(ack[18:], uint16(target))
 		if _, err = receiver.WriteToUDP(ack, peer); err != nil {
 			t.Fatal(err)
 		}
@@ -115,7 +126,7 @@ func FuzzOgg(f *testing.F) {
 	})
 }
 
-// Supplying only 40 ms of PCM must produce an audio packet without needing a
+// Supplying only 15 ms of PCM must produce an audio packet without needing a
 // larger input batch. The fake capture keeps its pipe open but sends no more.
 func TestRealtimeDoesNotWaitForLargePCMBatch(t *testing.T) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
@@ -123,7 +134,7 @@ func TestRealtimeDoesNotWaitForLargePCMBatch(t *testing.T) {
 	}
 	dir := t.TempDir()
 	pcm := filepath.Join(dir, "pcm")
-	if err := os.WriteFile(pcm, make([]byte, 48000*2*4*40/1000), 0600); err != nil {
+	if err := os.WriteFile(pcm, make([]byte, 48000*2*4*15/1000), 0600); err != nil {
 		t.Fatal(err)
 	}
 	script := "#!/bin/sh\ncat '" + strings.ReplaceAll(pcm, "'", "'\"'\"'") + "'\nexec sleep 30\n"
@@ -138,7 +149,7 @@ func TestRealtimeDoesNotWaitForLargePCMBatch(t *testing.T) {
 	defer receiver.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	session := cast.StreamingSession{SenderSSRC: 42, ReceiverSSRC: 43, Port: receiver.LocalAddr().(*net.UDPAddr).Port, DelayMS: 40}
+	session := cast.StreamingSession{SenderSSRC: 42, ReceiverSSRC: 43, Port: receiver.LocalAddr().(*net.UDPAddr).Port, DelayMS: 20}
 	stream, err := NewRealtime(ctx, config.Default(), "127.0.0.1", "127.0.0.1", session)
 	if err != nil {
 		t.Fatal(err)
@@ -149,7 +160,7 @@ func TestRealtimeDoesNotWaitForLargePCMBatch(t *testing.T) {
 	for {
 		n, _, err := receiver.ReadFromUDP(packet)
 		if err != nil {
-			t.Fatalf("encoder waited for more than 40 ms of PCM: %v", err)
+			t.Fatalf("encoder waited for more than 15 ms of PCM: %v", err)
 		}
 		if n == 28 && packet[1] == 200 {
 			continue
@@ -160,8 +171,8 @@ func TestRealtimeDoesNotWaitForLargePCMBatch(t *testing.T) {
 		block, _ := aes.NewCipher(session.Key[:])
 		plain := make([]byte, n-19)
 		cipher.NewCTR(block, session.IV[:]).XORKeyStream(plain, packet[19:n])
-		if opusSamples(plain) != 960 {
-			t.Fatal("short input did not produce a 20 ms Opus packet")
+		if opusSamples(plain) != session.FrameDurationMS()*48 {
+			t.Fatal("short input did not produce the expected Opus packet")
 		}
 		break
 	}

@@ -27,7 +27,7 @@ func TestFrameEncryption(t *testing.T) {
 func TestPacketFragmentation(t *testing.T) {
 	data := bytes.Repeat([]byte{17}, 2500)
 	seq := uint16(65535)
-	packets := audioPackets(42, 257, &seq, data)
+	packets := audioPackets(42, 257, &seq, 960, data)
 	if len(packets) != 3 || seq != 2 {
 		t.Fatal("fragment count or sequence wrap")
 	}

@@ -52,11 +52,11 @@ func TestPersistenceAndDefaults(t *testing.T) {
 }
 
 func TestRealtimeDelayBounds(t *testing.T) {
-	for _, delay := range []int{0, 39, 40, 100, 400, 1000, 1001} {
+	for _, delay := range []int{0, 19, 20, 30, 39, 40, 100, 400, 1000, 1001} {
 		c := Default()
 		c.Codec = "cast-opus"
 		c.TargetDelayMS = delay
-		valid := delay >= 40 && delay <= 1000
+		valid := delay >= 20 && delay <= 1000
 		if (c.Validate() == nil) != valid {
 			t.Fatalf("delay %d validation", delay)
 		}
