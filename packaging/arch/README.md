@@ -28,21 +28,6 @@ Choose a destination and unmute ShoutOut in KDE's output selector. Do not run
 `shoutout install` for a package installation; that command installs a separate
 copy in your home directory.
 
-## Replacing a per-user installation
-
-Close System Settings, then remove the older per-user copy before enabling the
-packaged service:
-
-```sh
-~/.local/bin/shoutout uninstall
-systemctl --user daemon-reload
-systemctl --user enable --now shoutout.service
-/usr/bin/shoutout configure
-```
-
-Personal settings are retained. Log out and back in to clear the old inherited
-Qt plugin path. The package never deletes per-user files automatically.
-
 ## Build only or remove
 
 `makepkg -s` builds the `.pkg.tar.zst` without installing it. `check()` runs Go

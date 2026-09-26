@@ -89,8 +89,4 @@ Go race tests and vet. The packaged, stripped KDE module passed the native
 smoke check and the packaged executable reported its VCS version. The desktop
 entry passed `desktop-file-validate` and the package file list was inspected.
 
-This was not a clean-chroot build or a system-wide installation test. Installing
-through pacman requires interactive sudo authentication on this machine. The
-existing per-user deployment was retained. Display strings now use ShoutOut;
-package names, executable names and identifiers remain lowercase. An existing
-virtual sink retains its old description until recreated by a new audio session.
+This was not a clean-chroot build or a system-wide installation test.
