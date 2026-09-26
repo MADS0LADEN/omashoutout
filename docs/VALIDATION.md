@@ -1,30 +1,24 @@
 # Validation
 
-## Environment
+Local platform: Arch Linux, KDE Plasma 6, PipeWire 1.6.9, Chromecast Audio named Lars Kontor.
 
-Local validation uses Arch Linux, KDE Plasma, PipeWire 1.6.9 through its PulseAudio interface, and a Chromecast Audio named Lars Kontor. All hardware commands are constrained to a maximum receiver volume of 5%; tests use 1%, with -40 dB PCM attenuation.
+## Confirmed
 
-## Verified so far
+- User confirms Shoutout appears as an output and produces audible audio. The continuous MP3 path had approximately 30 seconds of user-observed delay.
+- AAC live segments are accepted by the receiver, with repeated playlist/segment requests and advancing PLAYING status. The user estimates roughly two seconds of audible delay with 500 ms segments, 128 kbps AAC and an 80 ms host buffer. This is a listening estimate, not an instrumented measurement.
+- Native capture has `node.virtual=true` and no Pulse client association, allowing KDE to exclude it from the Applications list.
+- An isolated sink test confirms native volume affects monitor PCM and native mute produces silence. Service restarts adopt the existing sink without resetting gain or routing.
+- The native KCM loads, discovers receivers, displays status and exposes the full 0–100% receiver scale. KDE System Settings enumerates it when the per-user Qt plugin path is loaded.
+- Settings use private Unix IPC; the former browser UI has been removed.
+- Local Go tests, race checks and vet have passed; native compilation and offscreen UI loading have passed. Synthetic live-stream tests exercise actual encoding, manifest availability and receiver address restrictions without contacting speakers.
+- Earlier local amd64/arm64 Go builds and vulnerability checks passed. Native modules require builds for the target Qt/KDE environment.
 
-- Go builds; unit tests, race tests, and `go vet` pass.
-- Direct IPv4 mDNS discovery identifies the intended receiver without a running Avahi daemon.
-- The installed systemd user service starts and exposes the owned Shoutout sink and its monitor through the desktop audio server.
-- The pre-existing default desktop output is preserved. The user confirmed that Shoutout appears in the KDE output selector.
-- The receiver requests the continuous MP3 stream and reports PLAYING, with confirmed 1% receiver volume and mute status.
-- Browser automation opens settings, discovers devices, exercises mute/unmute, and finds no JavaScript exceptions.
-- A quiet three-second signal routed specifically to the Shoutout sink produced nonzero attenuated PCM while the receiver reported PLAYING, unmuted, at 1%. This validates the software path, not acoustic output.
-- Restarting the installed service recreates the sink, reconnects, and returns to muted playback.
-- Linux amd64 and arm64 builds succeeded locally.
-- `govulncheck` reported no known vulnerabilities. The installed desktop entry and systemd unit pass their validators.
-- Cast framing rejects malformed and oversized frames. Volume checks reject values above 5%, invalid numbers, and receiver reports outside the requested limit.
-- Slow HTTP subscribers are disconnected instead of allowing an unbounded backlog.
+Hardware testing started muted at 1%; subsequent listening uses 3%, always below the absolute 5% test maximum. This restriction is not a product volume cap.
 
-## Limits
+## Outstanding
 
-Audible output and end-to-end latency cannot be established from Cast's PLAYING status alone. Acoustic measurement and subjective listening are separate checks. UI presets currently adjust MP3 bitrate and the host queue; alternative codecs, real-time transports, automatic video synchronization, native distro packages, and automatic updates are not implemented.
+AAC acoustic latency, long-duration drift, network recovery, suspend/resume, speaker groups, fresh distro installation and packaged distribution need further validation. One selected receiver/group is supported; multiple simultaneous destinations are not implemented. No automatic game/video synchronization is provided.
 
-The settings page is browser-based; the desktop entry opens it using the user's browser. KDE uses the regular audio-server sink, with no custom Plasma plugin. Fresh distro installation, speaker groups, hostile-network testing, forced network/audio-server recovery, and long-duration drift tests remain separate validation tasks.
+The per-user plugin becomes available to the ordinary System Settings launcher after a Plasma login. `shoutout configure` supplies its search path immediately. No privileged system plugin install is required by this method.
 
-## Hosted CI
-
-The workflow is committed, but GitHub refused to start the initial jobs because of an account billing/spending-limit restriction. No workflow steps ran and no hosted build artifacts were produced. Local verification above is independent of that restriction.
+GitHub Actions previously refused to start jobs due to an account billing/spending-limit restriction. No hosted workflow steps ran; local checks are independent of that restriction.

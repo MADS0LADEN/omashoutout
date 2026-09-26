@@ -20,6 +20,8 @@ import (
 var errTakenOver = errors.New("another controller took over; save settings to reconnect")
 
 type Status struct {
+	SinkMuted       bool      `json:"sink_muted"`
+	SinkVolume      float64   `json:"sink_volume_percent"`
 	PlaybackSeconds float64   `json:"playback_seconds"`
 	State           string    `json:"state"`
 	Message         string    `json:"message"`
@@ -45,8 +47,6 @@ type Service struct {
 }
 
 func New(c config.Config, path string) *Service {
-	// Every daemon start requires explicit unmuting, even if last session was audible.
-	c.Muted = true
 	return &Service{config: c, path: path, changed: make(chan struct{}, 1), status: Status{State: "starting", Sink: audio.SinkName, ReceiverMuted: true}}
 }
 func (s *Service) Config() config.Config { s.mu.Lock(); defer s.mu.Unlock(); return s.config }
@@ -61,6 +61,10 @@ func (s *Service) Update(c config.Config) error {
 		return err
 	}
 	s.config = c
+	s.status.State = "reconfiguring"
+	s.status.PlayerState = ""
+	s.status.Message = "Applying device settings."
+	s.status.Updated = time.Now()
 	if s.sessionCancel != nil {
 		s.sessionCancel()
 	}
@@ -85,13 +89,7 @@ func (s *Service) state(state, message string) {
 }
 func (s *Service) Run(ctx context.Context) error {
 	var sink *audio.Sink
-	defer func() {
-		if sink != nil {
-			if err := sink.Close(); err != nil {
-				slog.Warn("remove output", "error", err)
-			}
-		}
-	}()
+
 	for {
 		if ctx.Err() != nil {
 			return nil
@@ -145,10 +143,7 @@ func (s *Service) Run(ctx context.Context) error {
 		if !s.wait(ctx, 3*time.Second) {
 			return nil
 		}
-		// Rebuild the owned sink as well, covering an audio-server restart.
-		if err := sink.Close(); err != nil {
-			slog.Debug("old sink unavailable", "error", err)
-		}
+		// Reconcile without resetting desktop routing or volume.
 		sink = nil
 	}
 }
@@ -169,7 +164,7 @@ func (s *Service) wait(ctx context.Context, d time.Duration) bool {
 	}
 }
 func (s *Service) session(ctx context.Context, c config.Config) error {
-	s.state("connecting", "Connecting muted; receiver volume is limited to 5%.")
+	s.state("connecting", "Connecting muted; verifying the configured receiver volume.")
 	if c.DeviceID != "" {
 		scanCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		devices, err := discovery.Discover(scanCtx)
@@ -219,13 +214,27 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 		return err
 	}
 	defer stream.Close()
-	if err = client.Load(ctx, app, stream.URL); err != nil {
+	if err = stream.WaitReady(ctx); err != nil {
+		return err
+	}
+	if err = client.Load(ctx, app, stream.URL, stream.ContentType); err != nil {
 		return fmt.Errorf("load audio: %w", err)
 	}
-	if err = client.SetVolume(ctx, c.ReceiverVolume, c.Muted); err != nil {
+	watchCtx, stopWatch := context.WithCancel(ctx)
+	defer stopWatch()
+	states, err := audio.WatchSink(watchCtx)
+	if err != nil {
+		return err
+	}
+	native, err := audio.ReadSink(ctx)
+	if err != nil {
+		return err
+	}
+	if err = client.SetVolume(ctx, c.ReceiverVolume, native.Muted); err != nil {
 		return fmt.Errorf("verify playback volume: %w", err)
 	}
-	stream.Allowed.Store(!c.Muted)
+	stream.Allowed.Store(!native.Muted)
+
 	s.state("streaming", "Connected. Select Shoutout in KDE's audio output menu.")
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -235,6 +244,18 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 			return ctx.Err()
 		case err := <-stream.Done:
 			return fmt.Errorf("audio pipeline: %w", err)
+		case next, ok := <-states:
+			if !ok {
+				return errors.New("desktop audio connection closed")
+			}
+			if next.Muted != native.Muted {
+				stream.Allowed.Store(false)
+				if err = client.SetVolume(ctx, c.ReceiverVolume, next.Muted); err != nil {
+					return err
+				}
+				stream.Allowed.Store(!next.Muted)
+			}
+			native = next
 		case <-ticker.C:
 			rs, err := client.Status(ctx)
 			if err != nil {
@@ -256,14 +277,18 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 				if err = client.SetVolume(ctx, c.ReceiverVolume, true); err != nil {
 					return fmt.Errorf("receiver volume changed; stream muted: %w", err)
 				}
-				s.mu.Lock()
-				s.config.Muted = true
-				saveErr := config.Save(s.path, s.config)
-				s.mu.Unlock()
-				if saveErr != nil {
-					return fmt.Errorf("persist protective mute: %w", saveErr)
+				if err = audio.SetMuted(ctx, true); err != nil {
+					return err
 				}
 				return errors.New("external receiver volume exceeded configured limit; reconnecting muted")
+			}
+			if rs.Volume.Muted != native.Muted {
+				stream.Allowed.Store(false)
+				if err = audio.SetMuted(ctx, rs.Volume.Muted); err != nil {
+					return err
+				}
+				native.Muted = rs.Volume.Muted
+				stream.Allowed.Store(!native.Muted)
 			}
 			ms, err := client.Media(ctx, app)
 			if err != nil {
@@ -275,7 +300,7 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 				return errTakenOver
 			}
 			s.mu.Lock()
-			s.status = Status{PlaybackSeconds: ms.CurrentTime, State: "streaming", Message: "Select Shoutout in KDE. Receiver latency has not been measured.", Sink: audio.SinkName, Device: c.DeviceName, PlayerState: ms.PlayerState, ReceiverVolume: rs.Volume.Level, ReceiverMuted: rs.Volume.Muted, EncodedBytes: stream.Bytes.Load(), MediaRequests: stream.Requests.Load(), Subscribers: stream.Subscribers(), Peak: math.Float64frombits(stream.Peak.Load()), Updated: time.Now()}
+			s.status = Status{SinkMuted: native.Muted, SinkVolume: native.VolumePercent(), PlaybackSeconds: ms.CurrentTime, State: "streaming", Message: "Select Shoutout in KDE. Receiver latency has not been measured.", Sink: audio.SinkName, Device: c.DeviceName, PlayerState: ms.PlayerState, ReceiverVolume: rs.Volume.Level, ReceiverMuted: rs.Volume.Muted, EncodedBytes: stream.Bytes.Load(), MediaRequests: stream.Requests.Load(), Subscribers: stream.Subscribers(), Peak: math.Float64frombits(stream.Peak.Load()), Updated: time.Now()}
 			s.mu.Unlock()
 			if ms.PlayerState == "IDLE" {
 				return fmt.Errorf("receiver stopped audio: %s", ms.IdleReason)

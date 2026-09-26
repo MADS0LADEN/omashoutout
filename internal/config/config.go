@@ -9,10 +9,12 @@ import (
 	"path/filepath"
 )
 
-// MaxReceiverVolume is an absolute ceiling, including during calibration.
-const MaxReceiverVolume = 0.05
+// MaxReceiverVolume is the receiver protocol range. Agent hardware tests stay at or below 0.05.
+const MaxReceiverVolume = 1.0
 
 type Config struct {
+	Codec          string  `json:"codec"`
+	SegmentMS      int     `json:"segment_ms"`
 	Enabled        bool    `json:"enabled"`
 	Version        int     `json:"version"`
 	DeviceID       string  `json:"device_id"`
@@ -21,7 +23,6 @@ type Config struct {
 	Port           int     `json:"port"`
 	TrimDB         float64 `json:"trim_db"`
 	ReceiverVolume float64 `json:"receiver_volume"`
-	Muted          bool    `json:"muted"`
 	Preset         string  `json:"preset"`
 	Bitrate        int     `json:"bitrate_kbps"`
 	BufferMS       int     `json:"buffer_ms"`
@@ -29,10 +30,16 @@ type Config struct {
 }
 
 func Default() Config {
-	return Config{Enabled: true, Version: 1, Port: 8009, TrimDB: -40, ReceiverVolume: 0.01, Muted: true, Preset: "video", Bitrate: 192, BufferMS: 200, MediaPort: 17833}
+	return Config{Codec: "aac-hls", SegmentMS: 500, Enabled: true, Version: 1, Port: 8009, TrimDB: 0, ReceiverVolume: 0.01, Preset: "video", Bitrate: 192, BufferMS: 200, MediaPort: 17833}
 }
 
 func (c Config) Validate() error {
+	if c.Codec != "aac-hls" && c.Codec != "mp3" {
+		return errors.New("codec must be aac-hls or mp3")
+	}
+	if c.SegmentMS < 250 || c.SegmentMS > 2000 {
+		return errors.New("live segment length must be between 250 and 2000 ms")
+	}
 	if c.Version != 1 {
 		return errors.New("unsupported configuration version")
 	}
@@ -43,7 +50,7 @@ func (c Config) Validate() error {
 		return errors.New("trim must be between -80 and 0 dB")
 	}
 	if math.IsNaN(c.ReceiverVolume) || math.IsInf(c.ReceiverVolume, 0) || c.ReceiverVolume < 0 || c.ReceiverVolume > MaxReceiverVolume {
-		return errors.New("receiver volume must be between 0 and 5%; 5% is the absolute maximum")
+		return errors.New("receiver volume must be between 0 and 100%")
 	}
 	switch c.Preset {
 	case "interactive", "video", "music", "custom":
@@ -51,7 +58,7 @@ func (c Config) Validate() error {
 		return errors.New("unknown preset")
 	}
 	if c.Bitrate != 128 && c.Bitrate != 192 && c.Bitrate != 256 && c.Bitrate != 320 {
-		return errors.New("MP3 bitrate must be 128, 192, 256 or 320 kbps")
+		return errors.New("encoding bitrate must be 128, 192, 256 or 320 kbps")
 	}
 	if c.BufferMS < 40 || c.BufferMS > 2000 {
 		return errors.New("buffer must be between 40 and 2000 ms")

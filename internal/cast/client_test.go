@@ -13,7 +13,7 @@ import (
 
 func TestUnsafeVolumeNeverWrites(t *testing.T) {
 	c := &Client{}
-	for _, v := range []float64{-1, 0.050001, 1, math.NaN(), math.Inf(1)} {
+	for _, v := range []float64{-1, 1.000001, 2, math.NaN(), math.Inf(1)} {
 		if c.SetVolume(context.Background(), v, false) == nil {
 			t.Fatalf("accepted volume %v", v)
 		}
@@ -29,7 +29,7 @@ func TestVolumeRequiresReceiverConfirmation(t *testing.T) {
 			defer c.Close()
 			go func() {
 				defer right.Close()
-				for i := 0; i < 3; i++ {
+				for i := 0; i < 4; i++ {
 					e, err := readEnvelope(right)
 					if err != nil {
 						return

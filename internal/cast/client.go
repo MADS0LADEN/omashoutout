@@ -216,18 +216,19 @@ func (c *Client) Status(ctx context.Context) (ReceiverStatus, error) {
 }
 func (c *Client) SetVolume(ctx context.Context, level float64, muted bool) error {
 	if !(level >= 0 && level <= config.MaxReceiverVolume) {
-		return errors.New("receiver volume exceeds absolute 5% maximum")
+		return errors.New("receiver volume must be between 0 and 100%")
 	}
 	// Quantize down, never up, because receivers commonly store float32 levels.
-	// In particular, float32(0.05) is slightly above the absolute maximum.
+	// Do not exceed the requested receiver level when converting precision.
 	quantized := float32(level)
 	if float64(quantized) > level {
 		quantized = math.Nextafter32(quantized, 0)
 	}
 	level = float64(quantized)
 	// Some receivers apply only one volume field per request. Mute first,
-	// then set and verify the level before any request to unmute.
-	for _, volume := range []map[string]any{{"muted": true}, {"level": level}} {
+	// then set the level and reassert mute: changing level can clear mute.
+	// Verify both fields before any intentional request to unmute.
+	for _, volume := range []map[string]any{{"muted": true}, {"level": level}, {"muted": true}} {
 		if _, err := c.request(ctx, receiver, receiverNS, map[string]any{"type": "SET_VOLUME", "volume": volume}); err != nil {
 			return err
 		}
@@ -272,8 +273,8 @@ func (c *Client) Launch(ctx context.Context) (Application, error) {
 	}
 	return Application{}, errors.New("receiver did not launch audio application")
 }
-func (c *Client) Load(ctx context.Context, app Application, url string) error {
-	_, err := c.request(ctx, app.TransportID, mediaNS, map[string]any{"type": "LOAD", "autoplay": true, "currentTime": 0, "media": map[string]any{"contentId": url, "contentType": "audio/mpeg", "streamType": "LIVE", "metadata": map[string]any{"metadataType": 3, "title": "Shoutout", "artist": "Desktop audio"}}})
+func (c *Client) Load(ctx context.Context, app Application, url, contentType string) error {
+	_, err := c.request(ctx, app.TransportID, mediaNS, map[string]any{"type": "LOAD", "autoplay": true, "currentTime": 0, "media": map[string]any{"contentId": url, "contentType": contentType, "streamType": "LIVE", "metadata": map[string]any{"metadataType": 3, "title": "Shoutout", "artist": "Desktop audio"}}})
 	return err
 }
 func (c *Client) Media(ctx context.Context, app Application) (MediaStatus, error) {

@@ -11,8 +11,11 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -21,6 +24,9 @@ import (
 )
 
 type Stream struct {
+	ContentType      string
+	directory        string
+	lastRequest      atomic.Int64
 	mu               sync.Mutex
 	subscribers      map[chan []byte]struct{}
 	queue            int
@@ -39,7 +45,13 @@ type Stream struct {
 
 func NewStream(parent context.Context, c config.Config, localIP, receiverIP string) (*Stream, error) {
 	ctx, cancel := context.WithCancel(parent)
+	started := false
 	s := &Stream{cancel: cancel, subscribers: make(map[chan []byte]struct{}), Done: make(chan error, 4), queue: max(2, c.Bitrate*125*c.BufferMS/1000/1024)}
+	defer func() {
+		if !started && s.directory != "" {
+			os.RemoveAll(s.directory)
+		}
+	}()
 	listener, err := net.Listen("tcp", net.JoinHostPort(localIP, strconv.Itoa(c.MediaPort)))
 	if err != nil {
 		cancel()
@@ -53,6 +65,7 @@ func NewStream(parent context.Context, c config.Config, localIP, receiverIP stri
 	}
 	path := "/audio/" + hex.EncodeToString(token[:]) + ".mp3"
 	s.URL = "http://" + listener.Addr().String() + path
+	s.ContentType = "audio/mpeg"
 	mux := http.NewServeMux()
 	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		host, _, _ := net.SplitHostPort(r.RemoteAddr)
@@ -107,15 +120,71 @@ func NewStream(parent context.Context, c config.Config, localIP, receiverIP stri
 			}
 		}
 	})
+	if c.Codec == "aac-hls" {
+		s.directory, err = os.MkdirTemp(os.Getenv("XDG_RUNTIME_DIR"), "shoutout-stream-")
+		if err != nil {
+			listener.Close()
+			cancel()
+			return nil, err
+		}
+		prefix := "/audio/" + hex.EncodeToString(token[:]) + "/"
+		s.URL = "http://" + listener.Addr().String() + prefix + "index.m3u8"
+		s.ContentType = "application/x-mpegURL"
+		mux.HandleFunc(prefix, func(w http.ResponseWriter, r *http.Request) {
+			host, _, _ := net.SplitHostPort(r.RemoteAddr)
+			if host != receiverIP {
+				http.Error(w, "receiver only", 403)
+				return
+			}
+			if r.Method != "GET" && r.Method != "HEAD" {
+				w.WriteHeader(405)
+				return
+			}
+			name := strings.TrimPrefix(r.URL.Path, prefix)
+			if name != filepath.Base(name) || (name != "index.m3u8" && (!strings.HasPrefix(name, "segment-") || !strings.HasSuffix(name, ".ts"))) {
+				http.NotFound(w, r)
+				return
+			}
+			b, err := os.ReadFile(filepath.Join(s.directory, name))
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			if name == "index.m3u8" {
+				w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+				b = []byte(strings.ReplaceAll(string(b), "#EXT-X-TARGETDURATION:0", "#EXT-X-TARGETDURATION:1"))
+			} else {
+				w.Header().Set("Content-Type", "video/mp2t")
+			}
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Cache-Control", "no-store")
+			http.NewResponseController(w).SetWriteDeadline(time.Now().Add(5 * time.Second))
+			s.Requests.Add(1)
+			s.lastRequest.Store(time.Now().UnixNano())
+			if r.Method == "GET" {
+				n, _ := w.Write(b)
+				if name != "index.m3u8" {
+					s.Bytes.Add(uint64(n))
+				}
+			}
+		})
+	}
 	s.server = &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second}
-	s.capture = exec.CommandContext(ctx, "parec", "--device="+SinkName+".monitor", "--format=float32le", "--rate=48000", "--channels=2", "--latency-msec="+strconv.Itoa(min(100, c.BufferMS)), "--property=application.name=Shoutout", "--property=node.dont-reconnect=true")
+	s.capture = exec.CommandContext(ctx, "parec", "--device="+SinkName+".monitor", "--format=float32le", "--rate=48000", "--channels=2", "--latency-msec="+strconv.Itoa(min(100, c.BufferMS)), "--property=application.name=Shoutout", "--property=node.dont-reconnect=true", "--property=node.virtual=true", "--property=media.role=filter")
 	captured, err := s.capture.StdoutPipe()
 	if err != nil {
 		listener.Close()
 		cancel()
 		return nil, err
 	}
-	s.encoder = exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "f32le", "-ar", "48000", "-ac", "2", "-i", "pipe:0", "-c:a", "libmp3lame", "-b:a", strconv.Itoa(c.Bitrate)+"k", "-f", "mp3", "-write_xing", "0", "-id3v2_version", "0", "-flush_packets", "1", "pipe:1")
+	args := []string{"-hide_banner", "-loglevel", "error", "-probesize", "32", "-analyzeduration", "0", "-f", "f32le", "-ar", "48000", "-ac", "2", "-i", "pipe:0"}
+	if c.Codec == "aac-hls" {
+		args = append(args, "-c:a", "aac", "-b:a", strconv.Itoa(c.Bitrate)+"k", "-flush_packets", "1", "-f", "hls", "-hls_time", strconv.FormatFloat(float64(c.SegmentMS)/1000, 'f', 3, 64), "-hls_list_size", "6", "-hls_delete_threshold", "3", "-hls_flags", "delete_segments+temp_file+omit_endlist", "-hls_segment_filename", filepath.Join(s.directory, "segment-%09d.ts"), filepath.Join(s.directory, "index.m3u8"))
+	} else {
+		args = append(args, "-c:a", "libmp3lame", "-b:a", strconv.Itoa(c.Bitrate)+"k", "-f", "mp3", "-write_xing", "0", "-id3v2_version", "0", "-flush_packets", "1", "pipe:1")
+	}
+	s.encoder = exec.CommandContext(ctx, "ffmpeg", args...)
+
 	input, err := s.encoder.StdinPipe()
 	if err != nil {
 		listener.Close()
@@ -166,6 +235,7 @@ func NewStream(parent context.Context, c config.Config, localIP, receiverIP stri
 		}
 	}()
 	go func() { defer s.wg.Done(); <-ctx.Done(); s.server.Close() }()
+	started = true
 	return s, nil
 }
 func (s *Stream) report(err error) {
@@ -232,6 +302,9 @@ func (s *Stream) Close() {
 	s.wg.Wait()
 	s.capture.Wait()
 	s.encoder.Wait()
+	if s.directory != "" {
+		os.RemoveAll(s.directory)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.closed = true
@@ -240,4 +313,40 @@ func (s *Stream) Close() {
 		delete(s.subscribers, ch)
 	}
 }
-func (s *Stream) Subscribers() int { s.mu.Lock(); defer s.mu.Unlock(); return len(s.subscribers) }
+func (s *Stream) Subscribers() int {
+	if s.directory != "" {
+		if time.Since(time.Unix(0, s.lastRequest.Load())) < 5*time.Second {
+			return 1
+		}
+		return 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.subscribers)
+}
+
+// WaitReady ensures live media exists before the receiver is asked to load it.
+func (s *Stream) WaitReady(ctx context.Context) error {
+	if s.directory == "" {
+		return nil
+	}
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	timeout := time.NewTimer(15 * time.Second)
+	defer timeout.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-s.Done:
+			return err
+		case <-timeout.C:
+			return errors.New("live encoder did not produce a playlist")
+		case <-ticker.C:
+			b, err := os.ReadFile(filepath.Join(s.directory, "index.m3u8"))
+			if err == nil && strings.Count(string(b), "#EXTINF:") >= 3 {
+				return nil
+			}
+		}
+	}
+}

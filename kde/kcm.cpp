@@ -1,0 +1,318 @@
+#include <KCModule>
+#include <KPluginFactory>
+#include <QCheckBox>
+#include <QComboBox>
+#include <QDir>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
+#include <QGroupBox>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLabel>
+#include <QLineEdit>
+#include <QProcess>
+#include <QPushButton>
+#include <QSignalBlocker>
+#include <QSpinBox>
+#include <QStandardPaths>
+#include <QTimer>
+#include <QVBoxLayout>
+
+class ShoutoutKCM : public KCModule {
+  Q_OBJECT
+public:
+  ShoutoutKCM(QObject *parent, const KPluginMetaData &data)
+      : KCModule(parent, data) {
+    setButtons(Apply | Default);
+    auto layout = new QVBoxLayout(widget());
+    auto description = new QLabel(
+        tr("Use KDE’s normal Audio output controls for volume and mute. These "
+           "settings configure where the Shoutout device sends audio."),
+        widget());
+    description->setWordWrap(true);
+    layout->addWidget(description);
+    auto form = new QFormLayout;
+    devices = new QComboBox(widget());
+    devices->setObjectName("destination");
+    form->addRow(tr("Destination:"), devices);
+    auto scan = new QPushButton(tr("Find audio devices"), widget());
+    scan->setObjectName("discover");
+    form->addRow(QString(), scan);
+    host = new QLineEdit(widget());
+    host->setObjectName("receiverAddress");
+    form->addRow(tr("Receiver address:"), host);
+    port = new QSpinBox(widget());
+    port->setRange(1, 65535);
+    port->setObjectName("receiverPort");
+    form->addRow(tr("Receiver port:"), port);
+    scale = new QDoubleSpinBox(widget());
+    scale->setRange(0, 100);
+    scale->setDecimals(1);
+    scale->setSingleStep(1);
+    scale->setSuffix(tr(" %"));
+    scale->setObjectName("volumeScale");
+    form->addRow(tr("Receiver volume at full desktop volume:"), scale);
+    trim = new QDoubleSpinBox(widget());
+    trim->setRange(-80, 0);
+    trim->setSuffix(tr(" dB"));
+    trim->setObjectName("trimDB");
+    form->addRow(tr("Additional attenuation:"), trim);
+    preset = new QComboBox(widget());
+    preset->setObjectName("preset");
+    for (const auto &p : {"Interactive", "Video", "Music", "Custom"})
+      preset->addItem(tr(p), QString(p).toLower());
+    form->addRow(tr("Playback preset:"), preset);
+    codec = new QComboBox(widget());
+    codec->setObjectName("codec");
+    codec->addItem(tr("AAC live segments"), "aac-hls");
+    codec->addItem(tr("MP3 continuous (high receiver delay)"), "mp3");
+    form->addRow(tr("Encoding / delivery:"), codec);
+    segment = new QSpinBox(widget());
+    segment->setObjectName("segmentMS");
+    segment->setRange(250, 2000);
+    segment->setSingleStep(250);
+    segment->setSuffix(tr(" ms"));
+    form->addRow(tr("Live segment length:"), segment);
+    bitrate = new QComboBox(widget());
+    bitrate->setObjectName("bitrate");
+    for (int rate : {128, 192, 256, 320})
+      bitrate->addItem(QString::number(rate) + tr(" kbps"), rate);
+    form->addRow(tr("Encoding bitrate:"), bitrate);
+    buffer = new QSpinBox(widget());
+    buffer->setObjectName("bufferMS");
+    buffer->setRange(40, 2000);
+    buffer->setSingleStep(20);
+    buffer->setSuffix(tr(" ms"));
+    form->addRow(tr("Host buffer target:"), buffer);
+    enabled = new QCheckBox(tr("Enable this output"), widget());
+    enabled->setObjectName("enabled");
+    form->addRow(QString(), enabled);
+    layout->addLayout(form);
+    auto note =
+        new QLabel(tr("The volume scale is configurable from 0–100%. Lower it "
+                      "for sensitive speakers. Presets do not guarantee low "
+                      "latency; receiver buffering is additional."),
+                   widget());
+    note->setWordWrap(true);
+    layout->addWidget(note);
+    status = new QLabel(widget());
+    status->setObjectName("status");
+    status->setWordWrap(true);
+    layout->addWidget(status);
+    error = new QLabel(widget());
+    error->setObjectName("error");
+    error->setWordWrap(true);
+    layout->addWidget(error);
+    layout->addStretch();
+    connect(scan, &QPushButton::clicked, this, &ShoutoutKCM::discover);
+    connect(devices, &QComboBox::activated, this, [this](int i) {
+      auto d = devices->itemData(i).toJsonObject();
+      if (d.isEmpty())
+        return;
+      host->setText(d["host"].toString());
+      port->setValue(d["port"].toInt());
+      config["device_id"] = d["id"];
+      config["device_name"] = d["name"];
+      markAsChanged();
+    });
+    connect(host, &QLineEdit::textEdited, this, [this] {
+      config["device_id"] = "";
+      config["device_name"] = host->text();
+      markAsChanged();
+    });
+    for (auto spin : {scale, trim})
+      connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
+              [this] { markAsChanged(); });
+    for (auto spin : {port, buffer, segment})
+      connect(spin, qOverload<int>(&QSpinBox::valueChanged), this,
+              [this] { markAsChanged(); });
+    connect(enabled, &QCheckBox::toggled, this, [this] { markAsChanged(); });
+    connect(codec, &QComboBox::activated, this, [this] {
+      segment->setEnabled(codec->currentData() == "aac-hls");
+      preset->setCurrentIndex(3);
+      markAsChanged();
+    });
+    connect(segment, qOverload<int>(&QSpinBox::valueChanged), this, [this] {
+      if (!loading)
+        preset->setCurrentIndex(3);
+    });
+    connect(bitrate, &QComboBox::activated, this, [this] {
+      preset->setCurrentIndex(3);
+      markAsChanged();
+    });
+    connect(buffer, qOverload<int>(&QSpinBox::valueChanged), this, [this] {
+      if (!loading)
+        preset->setCurrentIndex(3);
+    });
+    connect(preset, &QComboBox::activated, this, [this](int i) {
+      loading = true;
+      if (i < 3) {
+        codec->setCurrentIndex(0);
+        segment->setEnabled(true);
+      }
+      if (i == 0) {
+        bitrate->setCurrentIndex(0);
+        buffer->setValue(80);
+        segment->setValue(250);
+      }
+      if (i == 1) {
+        bitrate->setCurrentIndex(1);
+        buffer->setValue(200);
+        segment->setValue(500);
+      }
+      if (i == 2) {
+        bitrate->setCurrentIndex(3);
+        buffer->setValue(1000);
+        segment->setValue(1000);
+      }
+      loading = false;
+      markAsChanged();
+    });
+    timer = new QTimer(this);
+    timer->setInterval(2000);
+    connect(timer, &QTimer::timeout, this, &ShoutoutKCM::refreshStatus);
+    timer->start();
+  }
+  void load() override {
+    run({"config"}, {}, [this](QByteArray bytes) {
+      QJsonParseError parse;
+      auto doc = QJsonDocument::fromJson(bytes, &parse);
+      if (parse.error != QJsonParseError::NoError || !doc.isObject()) {
+        error->setText(tr("Invalid configuration response"));
+        return;
+      }
+      config = doc.object();
+      fill();
+      setNeedsSave(false);
+    });
+  }
+  void save() override {
+    config["codec"] = codec->currentData().toString();
+    config["segment_ms"] = segment->value();
+    config["host"] = host->text().trimmed();
+    config["port"] = port->value();
+    config["receiver_volume"] = scale->value() / 100.0;
+    config["trim_db"] = trim->value();
+    config["preset"] = preset->currentData().toString();
+    config["bitrate_kbps"] = bitrate->currentData().toInt();
+    config["buffer_ms"] = buffer->value();
+    config["enabled"] = enabled->isChecked();
+    run({"apply"}, QJsonDocument(config).toJson(QJsonDocument::Compact),
+        [this](QByteArray) {
+          setNeedsSave(false);
+          error->setText(tr(
+              "Settings applied. Volume and mute remain controlled by KDE."));
+        });
+  }
+  void defaults() override {
+    scale->setValue(1);
+    trim->setValue(0);
+    loading = true;
+    codec->setCurrentIndex(0);
+    segment->setEnabled(true);
+    preset->setCurrentIndex(1);
+    bitrate->setCurrentIndex(1);
+    buffer->setValue(200);
+    segment->setValue(500);
+    loading = false;
+    enabled->setChecked(true);
+    markAsChanged();
+  }
+
+private:
+  QJsonObject config;
+  QComboBox *devices, *preset, *bitrate, *codec;
+  QLineEdit *host;
+  QSpinBox *port, *buffer, *segment;
+  QDoubleSpinBox *scale, *trim;
+  QCheckBox *enabled;
+  QLabel *status, *error;
+  QTimer *timer;
+  bool loading = false, statusBusy = false;
+  QString executable() const {
+    QString local = QDir::homePath() + "/.local/bin/shoutout";
+    return QFileInfo::exists(local)
+               ? local
+               : QStandardPaths::findExecutable("shoutout");
+  }
+  void run(const QStringList &args, const QByteArray &input,
+           std::function<void(QByteArray)> success) {
+    auto proc = new QProcess(this);
+    auto deadline = new QTimer(proc);
+    deadline->setSingleShot(true);
+    connect(deadline, &QTimer::timeout, proc, [proc] { proc->kill(); });
+    connect(proc, &QProcess::errorOccurred, this,
+            [this, proc](QProcess::ProcessError e) {
+              if (e == QProcess::FailedToStart) {
+                error->setText(proc->errorString());
+                statusBusy = false;
+                proc->deleteLater();
+              }
+            });
+    connect(proc, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            this, [this, proc, success](int code, QProcess::ExitStatus exit) {
+              if (code == 0 && exit == QProcess::NormalExit) {
+                success(proc->readAllStandardOutput());
+              } else {
+                error->setText(QString::fromUtf8(proc->readAllStandardError()));
+              }
+              statusBusy = false;
+              proc->deleteLater();
+            });
+    proc->start(executable(), args);
+    if (!input.isEmpty())
+      proc->write(input);
+    proc->closeWriteChannel();
+    deadline->start(12000);
+  }
+  void fill() {
+    loading = true;
+    codec->setCurrentIndex(codec->findData(config["codec"].toString()));
+    segment->setValue(config["segment_ms"].toInt(500));
+    segment->setEnabled(codec->currentData() == "aac-hls");
+    host->setText(config["host"].toString());
+    port->setValue(config["port"].toInt(8009));
+    scale->setValue(config["receiver_volume"].toDouble() * 100);
+    trim->setValue(config["trim_db"].toDouble());
+    preset->setCurrentIndex(preset->findData(config["preset"].toString()));
+    bitrate->setCurrentIndex(bitrate->findData(config["bitrate_kbps"].toInt()));
+    buffer->setValue(config["buffer_ms"].toInt());
+    enabled->setChecked(config["enabled"].toBool());
+    devices->clear();
+    devices->addItem(config["device_name"].toString(), QJsonObject{});
+    loading = false;
+  }
+  void discover() {
+    error->clear();
+    run({"devices"}, {}, [this](QByteArray bytes) {
+      auto list = QJsonDocument::fromJson(bytes).array();
+      devices->clear();
+      devices->addItem(tr("Choose a destination"), QJsonObject{});
+      for (auto value : list) {
+        auto d = value.toObject();
+        devices->addItem(d["name"].toString() + " — " + d["model"].toString(),
+                         d);
+        if (d["id"] == config["device_id"])
+          devices->setCurrentIndex(devices->count() - 1);
+      }
+    });
+  }
+  void refreshStatus() {
+    if (statusBusy)
+      return;
+    statusBusy = true;
+    run({"status"}, {}, [this](QByteArray bytes) {
+      auto s = QJsonDocument::fromJson(bytes).object()["status"].toObject();
+      status->setText(
+          tr("%1 · %2\nDesktop: %3%, %4 · Receiver: %5%\n%6")
+              .arg(s["state"].toString(), s["player_state"].toString())
+              .arg(s["sink_volume_percent"].toDouble(), 0, 'f', 0)
+              .arg(s["sink_muted"].toBool() ? tr("muted") : tr("unmuted"))
+              .arg(s["receiver_volume"].toDouble() * 100, 0, 'f', 1)
+              .arg(s["message"].toString()));
+    });
+  }
+};
+K_PLUGIN_CLASS_WITH_JSON(ShoutoutKCM, "kcm_shoutout.json")
+#include "kcm.moc"

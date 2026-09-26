@@ -1,0 +1,56 @@
+#include <KCModule>
+#include <KPluginFactory>
+#include <QApplication>
+#include <QComboBox>
+#include <QDoubleSpinBox>
+#include <QLabel>
+#include <QPushButton>
+#include <QSpinBox>
+#include <QTimer>
+#include <cstdio>
+int main(int argc, char **argv) {
+  QApplication app(argc, argv);
+  if (argc < 2)
+    return 2;
+  auto result = KPluginFactory::instantiatePlugin<KCModule>(
+      KPluginMetaData(QString::fromLocal8Bit(argv[1])), nullptr);
+  if (!result) {
+    fprintf(stderr, "%s\n", qPrintable(result.errorText));
+    return 1;
+  }
+  auto module = result.plugin;
+  auto w = module->widget();
+  w->resize(780, 660);
+  w->show();
+  module->load();
+  QTimer::singleShot(1000, w, [&] {
+    auto scan = w->findChild<QPushButton *>("discover");
+    if (!scan) {
+      app.exit(1);
+      return;
+    }
+    scan->click();
+  });
+  QTimer::singleShot(7000, w, [&] {
+    auto scale = w->findChild<QDoubleSpinBox *>("volumeScale");
+    auto devices = w->findChild<QComboBox *>("destination");
+    auto status = w->findChild<QLabel *>("status");
+    auto codec = w->findChild<QComboBox *>("codec");
+    auto segment = w->findChild<QSpinBox *>("segmentMS");
+    if (!codec || codec->count() != 2 || !segment ||
+        segment->minimum() != 250 || segment->maximum() != 2000 || !scale ||
+        scale->maximum() != 100 || !devices || devices->count() < 2 ||
+        !status || status->text().isEmpty()) {
+      fprintf(stderr, "Native controls or discovery failed\n");
+      app.exit(1);
+      return;
+    }
+    printf("Native KDE module loaded; full 0–100%% scale; %d destination "
+           "entries; status available.\n",
+           devices->count());
+    if (argc > 2)
+      w->grab().save(QString::fromLocal8Bit(argv[2]));
+    app.exit(0);
+  });
+  return app.exec();
+}

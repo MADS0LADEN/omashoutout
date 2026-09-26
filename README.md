@@ -1,66 +1,50 @@
-# Shoutout
+# ShoutOut
 
-A Linux virtual audio output that plays desktop audio through a Google Cast audio device. Select **Shoutout** in KDE's audio output menu, then choose the destination, volume, and playback preset in its settings.
+A Linux virtual audio output that sends desktop audio to a Google Cast audio device. Select **Shoutout** in KDE's normal output selector. Configure the destination, encoding, buffering and volume scale in the native **ShoutOut** System Settings module.
 
-**Status:** an initial working implementation. Continuous MP3 streaming is implemented; latency has not been optimized. Interactive, Video, Music, and Custom presets adjust encoding and host buffering, but do not guarantee game or video synchronization.
+Playback is confirmed on a Chromecast Audio. Continuous MP3 exhibited roughly 30 seconds of audible delay. AAC live segments are now the default, with roughly two seconds of delay estimated by listening on the test receiver. This remains unsuitable for responsive games; no automatic video synchronization is provided.
 
 ## Install
 
-Requires Linux, PipeWire with its PulseAudio compatibility service (or a compatible PulseAudio server), `pactl`, `parec`, FFmpeg with `libmp3lame`, and a systemd user session.
-
-On Arch, the runtime packages are `pipewire-pulse`, `libpulse`, and `ffmpeg`. On Debian/Ubuntu, the tools are provided by `pulseaudio-utils` and `ffmpeg`, alongside the desktop's audio server. Installation on those distributions still needs independent validation.
-
-Build with the Go version declared in `go.mod` or newer:
+Requires a KDE Plasma 6 desktop, a systemd user session, PipeWire's PulseAudio compatibility service, `pactl`, `parec`, and FFmpeg with AAC and MP3 encoders. Building also requires Go (see `go.mod`), CMake, Ninja, a C++20 compiler, Qt6 Widgets, and KDE Frameworks 6 KCMUtils and CoreAddons development files. Arch is the current development platform; other distributions need validation.
 
 ```sh
-make build
+make build kde
 ./bin/shoutout doctor
-./bin/shoutout devices
 ./bin/shoutout setup --device "Your speaker name"
 ./bin/shoutout install
+shoutout configure
 ```
 
-Alternatively, run a downloaded Linux binary directly with those commands; end users do not need Go. The CI workflow produces amd64 and arm64 binary artifacts. There is no published release or distro package yet.
+The per-user installer copies the service binary, native settings plugin, desktop launcher and Plasma environment script, then enables the systemd user service. It preserves the selected output and existing Shoutout volume/mute. A newly created output starts muted at a default receiver scale of 1%.
 
-Installation copies the binary to `~/.local/bin/shoutout`, adds an application-menu entry, and enables a systemd **user** service. It does not require root or alter the desktop's selected output. Start-at-login follows the enabled user service.
+`shoutout configure` opens the ShoutOut module inside KDE System Settings immediately. The regular System Settings launcher discovers the per-user plugin after the next Plasma login. Close an already open System Settings window before using the new launcher. A system package can instead install the plugin into the standard Qt6 plugin directory; no distro package or complete binary release is published yet. The Go-only CI artifacts do not include the native module.
 
 ## Use
 
-Open **Shoutout** from the application menu or visit [local settings](http://127.0.0.1:17832). Choose a destination and save, then select Shoutout in KDE's sound menu. KDE's application audio controls can route individual applications instead of the whole desktop.
+Choose a detected receiver or enter its address and port. One destination is supported at a time; advertised speaker groups can be selected but have not been validated. Select Shoutout in KDE's audio selector, unmute it and route your applications normally.
 
-- Receiver volume is limited to **5% absolutely**, enforced in configuration, the UI, and Cast commands.
-- Defaults are **1% receiver volume**, **−40 dB attenuation**, and **muted**. Every service restart requires explicit unmuting in settings.
-- Desktop volume controls local sink gain. Audio attenuation is applied separately, with a peak bound before encoding.
-- Changes to destination, encoding, or settings reconnect playback. Unmuting can therefore take time while the receiver buffers.
-- Presets select MP3 bitrate and host queue limits. Receiver-side buffering can add substantial delay beyond those limits.
-- A receiver volume increase from another controller is detected by polling; Shoutout gates its audio, mutes, and reconnects muted. This is not a hardware limiter for audio produced by other apps or controls.
+- KDE's normal output slider and mute are authoritative. Internal capture is marked virtual so it does not appear as an application in KDE's mixer.
+- Receiver volume scale is configurable from **0–100%**. Keep it low for sensitive speakers. Optional additional PCM attenuation ranges from −80 to 0 dB. The 5% maximum applies only to development speaker tests.
+- Native volume changes apply to captured audio, so their audible effect includes stream delay. Native mute also sends a receiver mute command without restarting playback.
+- Encoding choices are AAC live segments and continuous MP3. Live segment duration is configurable from 250–2000 ms. The live playlist holds six segments; receiver buffering is additional. MP3 can have very high receiver delay.
+- Interactive, Video and Music presets select progressively larger host/segment buffers and encoding bitrates. Their names describe intent, not measured latency guarantees. Custom settings are supported.
+- Applying connection or encoding settings restarts the stream. The sink and desktop routing remain in place. Another controller taking over the receiver stops automatic reconnection; apply settings to reclaim it deliberately.
 
-The media server binds to the interface used to reach the receiver, on TCP **17833**, and serves only that receiver. Allow that inbound port through the local firewall if necessary. Device discovery uses IPv4 mDNS on UDP **5353**, with manual host/port settings available. Settings bind only to `127.0.0.1:17832`.
+Settings use a private Unix socket in `$XDG_RUNTIME_DIR`, with no browser interface. The media server listens on the receiver-facing interface at TCP **17833**, with a random session URL and receiver-address restriction. Discovery uses IPv4 mDNS on UDP **5353**. Allow those network paths when needed; the installer does not change your firewall.
 
-The configured output remains available while disconnected. The service retries connectivity errors, but stops trying to claim a receiver after another controller takes over; save settings to reconnect deliberately. One destination is supported at a time. Groups and IPv6-only networks have not been validated.
-
-## Manage
+## Manage and develop
 
 ```sh
-shoutout status
 shoutout configure
-systemctl --user status shoutout
+shoutout status
+shoutout devices
 journalctl --user -u shoutout
-systemctl --user disable --now shoutout  # stop and disable start-at-login
-systemctl --user enable --now shoutout  # enable again
+systemctl --user restart shoutout
 shoutout uninstall
-```
-
-Uninstall removes the installed binary, desktop entry, and service, while retaining personal settings. Configuration lives at `$XDG_CONFIG_HOME/shoutout/config.json` (normally `~/.config/shoutout/config.json`). Use the running settings page for changes; `setup` is intended before starting the service.
-
-## Develop
-
-```sh
 make test
-make build
-./bin/shoutout run
 ```
 
-A process lock prevents multiple instances from competing over the virtual output. Stop the installed service before running a development instance. Unit and race tests do not emit audio. Hardware playback testing must keep receiver volume at or below 5% and begin at 1% with attenuation.
+Configuration is stored in `$XDG_CONFIG_HOME/shoutout/config.json`, normally `~/.config/shoutout/config.json`. `setup` is intended before starting the service; use native settings or `shoutout config` / `shoutout apply` while running. Uninstall retains personal settings and removes the owned audio sink and installed files. Restart Plasma after uninstall to clear its inherited plugin search path.
 
-See [validation notes](docs/VALIDATION.md) for the tested environment and limitations, and the [implementation plan](docs/PLAN.md) for the design and remaining work.
+Tests use synthetic PCM and protocol simulations without emitting audio. Agent-run speaker tests must begin muted at 1%, verify receiver status, and never exceed 5%. See [validation](docs/VALIDATION.md) and the [plan](docs/PLAN.md).

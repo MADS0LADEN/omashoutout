@@ -9,12 +9,11 @@ import (
 	"github.com/lkarlslund/shoutout/internal/config"
 )
 
-func TestRestartAlwaysMuted(t *testing.T) {
+func TestNoIndependentMute(t *testing.T) {
 	c := config.Default()
-	c.Muted = false
 	s := New(c, filepath.Join(t.TempDir(), "config.json"))
-	if !s.Config().Muted {
-		t.Fatal("startup did not enforce mute")
+	if s.Config() != c {
+		t.Fatal("service changed user settings on restart")
 	}
 }
 func TestUpdateCancelsCurrentSession(t *testing.T) {
@@ -23,7 +22,7 @@ func TestUpdateCancelsCurrentSession(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	s.sessionCancel = cancel
-	c.ReceiverVolume = 0.06
+	c.ReceiverVolume = 1.01
 	if s.Update(c) == nil {
 		t.Fatal("accepted unsafe configuration")
 	}

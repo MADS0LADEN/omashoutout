@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -19,10 +17,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lkarlslund/shoutout/internal/audio"
 	"github.com/lkarlslund/shoutout/internal/config"
+	"github.com/lkarlslund/shoutout/internal/control"
 	"github.com/lkarlslund/shoutout/internal/discovery"
 	"github.com/lkarlslund/shoutout/internal/service"
-	"github.com/lkarlslund/shoutout/internal/settings"
 )
 
 var version = "dev"
@@ -47,18 +46,19 @@ func run(args []string) error {
 
 Commands:
   devices                 Discover receivers on the local network
-  setup --device NAME     Save a destination (always starts muted)
+  setup --device NAME     Save a destination
         --host ADDRESS    Or use a receiver address directly
   run                     Run the audio output and local settings service
   install                 Install and start a systemd user service
   uninstall               Remove installed service, binary and desktop entry
-  configure               Open settings in the default browser
+  configure               Open the native KDE settings module
   status                  Print the running service status
+  config                  Print the current configuration
+  apply                   Apply JSON configuration read from stdin
   doctor                  Check runtime prerequisites
   version                 Print build version
 
-Settings: http://127.0.0.1:17832
-Receiver volume has an absolute maximum of 5%.`)
+Use KDE audio controls for volume and mute.`)
 		return nil
 	case "version":
 		fmt.Println(version)
@@ -83,7 +83,6 @@ Receiver volume has an absolute maximum of 5%.`)
 		if err != nil {
 			return err
 		}
-		c.Muted = true
 		if *name != "" {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -115,24 +114,47 @@ Receiver volume has an absolute maximum of 5%.`)
 		if err = config.Save(path, c); err != nil {
 			return err
 		}
-		fmt.Println("Saved muted destination:", c.DeviceName, "— run shoutout install or shoutout run.")
+		fmt.Println("Saved destination:", c.DeviceName, "— run shoutout install or shoutout run.")
 		return nil
 	case "run":
 		return daemon(path)
 	case "configure":
-		return exec.Command("xdg-open", "http://"+settings.Address).Run()
-	case "status":
-		client := http.Client{Timeout: 3 * time.Second}
-		r, err := client.Get("http://" + settings.Address + "/api/status")
+		home, err := os.UserHomeDir()
 		if err != nil {
 			return err
 		}
-		defer r.Body.Close()
-		if r.StatusCode != 200 {
-			return fmt.Errorf("status HTTP %d", r.StatusCode)
+		plugin := filepath.Join(home, ".local", "lib", "qt6", "plugins", "plasma", "kcms", "systemsettings_qwidgets", "kcm_shoutout.so")
+		if _, err = os.Stat(plugin); err != nil {
+			return errors.New("native KDE module is not installed; build with make kde and run shoutout install")
 		}
-		_, err = io.Copy(os.Stdout, r.Body)
-		return err
+		cmd := exec.Command("systemsettings", "kcm_shoutout")
+		cmd.Env = append(os.Environ(), "QT_PLUGIN_PATH="+pluginSearchPath(home))
+		return cmd.Run()
+	case "status", "config":
+		r, err := control.Call(control.Request{Method: "status"})
+		if err != nil {
+			return err
+		}
+		if args[0] == "config" {
+			return json.NewEncoder(os.Stdout).Encode(r.Config)
+		}
+		return json.NewEncoder(os.Stdout).Encode(r)
+	case "apply":
+		var c config.Config
+		d := json.NewDecoder(io.LimitReader(os.Stdin, 16384))
+		d.DisallowUnknownFields()
+		if err = d.Decode(&c); err != nil {
+			return err
+		}
+		var extra any
+		if d.Decode(&extra) != io.EOF {
+			return errors.New("unexpected trailing data")
+		}
+		r, err := control.Call(control.Request{Method: "configure", Config: &c})
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(r.Config)
 	case "doctor":
 		return doctor()
 	case "install":
@@ -160,7 +182,7 @@ func daemon(path string) error {
 	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		return errors.New("Shoutout is already running")
 	}
-	listener, err := net.Listen("tcp", settings.Address)
+	listener, err := control.Listen()
 	if err != nil {
 		return err
 	}
@@ -169,15 +191,15 @@ func daemon(path string) error {
 	defer cancel()
 	s := service.New(c, path)
 	done := make(chan error, 1)
-	go func() { done <- settings.Run(ctx, s, listener); cancel() }()
-	slog.Info("settings available", "url", "http://"+settings.Address)
+	go func() { done <- control.Run(ctx, s, listener); cancel() }()
+	slog.Info("native KDE control ready")
 	err = s.Run(ctx)
 	cancel()
-	httpErr := <-done
+	controlErr := <-done
 	if err != nil {
 		return err
 	}
-	return httpErr
+	return controlErr
 }
 func doctor() error {
 	bad := false
@@ -200,11 +222,13 @@ func doctor() error {
 		fmt.Println("OK audio server reachable")
 	}
 	b, err = exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-encoders").CombinedOutput()
-	if err != nil || !strings.Contains(string(b), "libmp3lame") {
-		bad = true
-		fmt.Println("MISSING FFmpeg MP3 encoder")
-	} else {
-		fmt.Println("OK MP3 encoder")
+	for _, encoder := range []string{"libmp3lame", " aac "} {
+		if err != nil || !strings.Contains(string(b), encoder) {
+			bad = true
+			fmt.Println("MISSING FFmpeg encoder", strings.TrimSpace(encoder))
+		} else {
+			fmt.Println("OK encoder", strings.TrimSpace(encoder))
+		}
 	}
 	fmt.Println("Receiver must reach this machine on TCP port 17833; discovery uses UDP 5353.")
 	if bad {
@@ -228,6 +252,7 @@ func install(remove bool) error {
 	binaryPath := filepath.Join(home, ".local", "bin", "shoutout")
 	unitPath := filepath.Join(conf, "systemd", "user", "shoutout.service")
 	desktopPath := filepath.Join(data, "applications", "shoutout.desktop")
+	environmentPath := filepath.Join(conf, "plasma-workspace", "env", "shoutout.sh")
 	if remove {
 		cmd := exec.Command("systemctl", "--user", "disable", "--now", "shoutout.service")
 		cmd.Stdout = os.Stdout
@@ -235,7 +260,10 @@ func install(remove bool) error {
 		if err = cmd.Run(); err != nil {
 			return err
 		}
-		for _, p := range []string{unitPath, desktopPath, binaryPath} {
+		if err = audio.RemoveSink(context.Background()); err != nil {
+			return err
+		}
+		for _, p := range []string{unitPath, desktopPath, binaryPath, environmentPath, filepath.Join(home, ".local", "lib", "qt6", "plugins", "plasma", "kcms", "systemsettings_qwidgets", "kcm_shoutout.so")} {
 			if err = os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return err
 			}
@@ -281,6 +309,26 @@ func install(remove bool) error {
 	if err = os.Rename(temp.Name(), binaryPath); err != nil {
 		return err
 	}
+	// Install the native module beside the per-user Qt plugin tree when supplied.
+	moduleSource := filepath.Join(filepath.Dir(self), "kcm_shoutout.so")
+	if moduleData, readErr := os.ReadFile(moduleSource); readErr == nil {
+		moduleDest := filepath.Join(home, ".local", "lib", "qt6", "plugins", "plasma", "kcms", "systemsettings_qwidgets", "kcm_shoutout.so")
+		if err = os.MkdirAll(filepath.Dir(moduleDest), 0755); err != nil {
+			return err
+		}
+		if err = replaceFile(moduleDest, moduleData, 0755); err != nil {
+			return err
+		}
+	}
+	// Plasma sources this on login so its standard Settings launcher finds the module.
+	if err = os.MkdirAll(filepath.Dir(environmentPath), 0755); err != nil {
+		return err
+	}
+	pluginRoot := filepath.Join(home, ".local", "lib", "qt6", "plugins")
+	quotedRoot := "'" + strings.ReplaceAll(pluginRoot, "'", "'\"'\"'") + "'"
+	if err = os.WriteFile(environmentPath, []byte("export QT_PLUGIN_PATH="+quotedRoot+"${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}\n"), 0644); err != nil {
+		return err
+	}
 	// systemd interprets percent specifiers even in quoted command arguments.
 	escaped := strconv.Quote(strings.ReplaceAll(binaryPath, "%", "%%"))
 	unit := "[Unit]\nDescription=Shoutout virtual audio output\nAfter=pipewire-pulse.service\nStartLimitIntervalSec=60\nStartLimitBurst=5\n\n[Service]\nExecStart=" + escaped + " run\nRestart=on-failure\nRestartSec=3\nTimeoutStopSec=10\nNoNewPrivileges=yes\n\n[Install]\nWantedBy=default.target\n"
@@ -299,6 +347,34 @@ func install(remove bool) error {
 			return err
 		}
 	}
-	fmt.Println("Installed and started. Open Shoutout from the application menu, or visit http://" + settings.Address)
+	fmt.Println("Installed and started. Use KDE Audio for volume/mute and Shoutout native settings for destination and presets.")
 	return nil
+}
+
+func pluginSearchPath(home string) string {
+	root := filepath.Join(home, ".local", "lib", "qt6", "plugins")
+	if existing := os.Getenv("QT_PLUGIN_PATH"); existing != "" {
+		return root + ":" + existing
+	}
+	return root
+}
+
+func replaceFile(path string, data []byte, mode os.FileMode) error {
+	f, err := os.CreateTemp(filepath.Dir(path), ".shoutout-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if err = f.Chmod(mode); err != nil {
+		f.Close()
+		return err
+	}
+	if _, err = f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
 }

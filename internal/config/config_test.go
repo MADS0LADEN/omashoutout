@@ -6,15 +6,15 @@ import (
 	"testing"
 )
 
-func TestAbsoluteVolumeLimit(t *testing.T) {
-	for _, v := range []float64{-0.01, 0.050001, 0.1, 1, math.NaN(), math.Inf(1)} {
+func TestReceiverProtocolRange(t *testing.T) {
+	for _, v := range []float64{-0.01, 1.000001, 2, math.NaN(), math.Inf(1)} {
 		c := Default()
 		c.ReceiverVolume = v
 		if c.Validate() == nil {
 			t.Errorf("accepted unsafe volume %v", v)
 		}
 	}
-	for _, v := range []float64{0, 0.01, 0.05} {
+	for _, v := range []float64{0, 0.01, 0.05, 0.5, 1} {
 		c := Default()
 		c.ReceiverVolume = v
 		if err := c.Validate(); err != nil {
@@ -28,7 +28,7 @@ func TestPersistenceAndDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !c.Muted || c.ReceiverVolume != 0.01 || c.TrimDB != -40 {
+	if c.ReceiverVolume != 0.01 || c.TrimDB != 0 {
 		t.Fatalf("unsafe defaults: %+v", c)
 	}
 	c.Host = "192.0.2.1"
@@ -39,7 +39,7 @@ func TestPersistenceAndDefaults(t *testing.T) {
 	if err != nil || got != c {
 		t.Fatalf("round trip: %+v, %v", got, err)
 	}
-	c.ReceiverVolume = 0.06
+	c.ReceiverVolume = 1.01
 	if Save(path, c) == nil {
 		t.Fatal("saved unsafe config")
 	}
