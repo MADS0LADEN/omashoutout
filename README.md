@@ -24,7 +24,6 @@ For **KDE Plasma 6 + PipeWire**. Build from source with Go, FFmpeg and the Qt6/K
 On Arch Linux, use the [system-wide package](packaging/arch/README.md):
 
 ```sh
-cd packaging/arch
 makepkg -si
 shoutout configure
 ```

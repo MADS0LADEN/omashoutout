@@ -5,12 +5,12 @@ Build and install the latest Git version system-wide:
 ```sh
 sudo pacman -S --needed base-devel git
 git clone https://github.com/lkarlslund/shoutout.git
-cd shoutout/packaging/arch
+cd shoutout
 makepkg -si
 shoutout configure
 ```
 
-The package is named `shoutout-git`. It installs:
+The root [PKGBUILD](../../PKGBUILD) builds `shoutout-git`. It installs:
 
 - `/usr/bin/shoutout`
 - The native KDE module under `/usr/lib/qt6/plugins/`

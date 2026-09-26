@@ -8,3 +8,9 @@
 /packaging/arch/pkg/
 /packaging/arch/shoutout/
 /packaging/arch/*.pkg.tar.*
+
+/src/
+/pkg/
+/shoutout/
+/*.pkg.tar.*
+/*.src.tar.*
