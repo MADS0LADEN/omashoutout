@@ -96,3 +96,23 @@ install hook that starts the service in logged-in users' managers. Mock-command
 checks covered install, upgrade, removal and skipping root. A rebuilt package
 passed its Go checks and contains the expected symlink and `.INSTALL` script.
 Actual privileged pacman installation remains untested on this host.
+
+
+## Host-side Cast Streaming latency reduction
+
+A synthetic real-time input fed stereo float32 PCM at 48 kHz in 10 ms writes to
+FFmpeg, with no audio device or speaker involved. Across three one-second runs,
+median audio-page output lag relative to the end of the corresponding frame was
+70.5–70.6 ms with raw PCM input and 20.2–20.4 ms with streaming WAV input and
+3840-byte demux packets. Measurements used the steady middle portion of each
+stream (0.2–0.9 seconds); they exclude capture, networking and receiver playback.
+
+The Cast Streaming path now requests 10 ms capture batches and bounds encoder
+input packets to 10 ms. It retains 20 ms Opus frames and the configured receiver
+buffer. The WAV length is ignored so the stream can exceed RIFF's size limit.
+A regression test supplies only 40 ms of PCM while holding the input open and
+requires an encrypted 20 ms Opus packet; it fails on the previous pipeline and
+passes on the updated one. Full Go race tests and vet pass.
+
+These changes have not yet been acoustically measured or hardware-tested on a
+receiver. The installed service and the user's speaker settings were unchanged.

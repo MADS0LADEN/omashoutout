@@ -13,6 +13,8 @@ import (
 	"github.com/lkarlslund/shoutout/internal/config"
 )
 
+const realtimeCaptureLatencyMS = 10
+
 // NewRealtime starts capture only after the receiver has negotiated its UDP
 // endpoint. PCM stays gated until the service verifies the receiver volume.
 func NewRealtime(parent context.Context, c config.Config, localIP, remoteIP string, session cast.StreamingSession) (*Stream, error) {
@@ -36,12 +38,12 @@ func NewRealtime(parent context.Context, c config.Config, localIP, remoteIP stri
 			}
 		}
 	}()
-	s.capture = exec.CommandContext(ctx, "parec", "--device="+SinkName+".monitor", "--format=float32le", "--rate=48000", "--channels=2", "--latency-msec="+strconv.Itoa(captureLatencyMS), "--property=application.name=ShoutOut", "--property=node.dont-reconnect=true", "--property=node.virtual=true", "--property=media.role=filter")
+	s.capture = exec.CommandContext(ctx, "parec", "--device="+SinkName+".monitor", "--format=float32le", "--rate=48000", "--channels=2", "--latency-msec="+strconv.Itoa(realtimeCaptureLatencyMS), "--property=application.name=ShoutOut", "--property=node.dont-reconnect=true", "--property=node.virtual=true", "--property=media.role=filter")
 	captured, err := s.capture.StdoutPipe()
 	if err != nil {
 		return nil, err
 	}
-	s.encoder = exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-loglevel", "error", "-probesize", "32", "-analyzeduration", "0", "-f", "f32le", "-ar", "48000", "-ac", "2", "-i", "pipe:0", "-c:a", "libopus", "-application", "lowdelay", "-frame_duration", "20", "-b:a", strconv.Itoa(c.Bitrate)+"k", "-vbr", "off", "-f", "ogg", "-page_duration", "20000", "-flush_packets", "1", "pipe:1")
+	s.encoder = exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-loglevel", "error", "-probesize", "32", "-analyzeduration", "0", "-f", "wav", "-max_size", "3840", "-ignore_length", "1", "-i", "pipe:0", "-c:a", "libopus", "-application", "lowdelay", "-frame_duration", "20", "-b:a", strconv.Itoa(c.Bitrate)+"k", "-vbr", "off", "-f", "ogg", "-page_duration", "20000", "-flush_packets", "1", "pipe:1")
 	input, err := s.encoder.StdinPipe()
 	if err != nil {
 		captured.Close()
@@ -58,6 +60,13 @@ func NewRealtime(parent context.Context, c config.Config, localIP, remoteIP stri
 		input.Close()
 		output.Close()
 		return nil, fmt.Errorf("start Opus encoder: %w", err)
+	}
+	// Bound the demuxer's input packets to 10 ms. Raw PCM input can collect
+	// much larger batches even when the encoder emits short Opus frames.
+	if err = writeFloatPCMHeader(input); err != nil {
+		captured.Close()
+		input.Close()
+		return nil, fmt.Errorf("write encoder input header: %w", err)
 	}
 	if err = s.capture.Start(); err != nil {
 		captured.Close()
@@ -179,4 +188,24 @@ func opusSamples(p []byte) int {
 		count = int(p[1] & 63)
 	}
 	return samples * count
+}
+
+// writeFloatPCMHeader describes an indefinite stereo float32/48 kHz WAV stream.
+// The encoder's ignore_length option allows playback beyond the RIFF size limit.
+func writeFloatPCMHeader(w io.Writer) error {
+	var h [44]byte
+	copy(h[0:4], "RIFF")
+	binary.LittleEndian.PutUint32(h[4:8], ^uint32(0))
+	copy(h[8:16], "WAVEfmt ")
+	binary.LittleEndian.PutUint32(h[16:20], 16)
+	binary.LittleEndian.PutUint16(h[20:22], 3)
+	binary.LittleEndian.PutUint16(h[22:24], 2)
+	binary.LittleEndian.PutUint32(h[24:28], 48000)
+	binary.LittleEndian.PutUint32(h[28:32], 48000*2*4)
+	binary.LittleEndian.PutUint16(h[32:34], 2*4)
+	binary.LittleEndian.PutUint16(h[34:36], 32)
+	copy(h[36:40], "data")
+	binary.LittleEndian.PutUint32(h[40:44], ^uint32(0))
+	_, err := w.Write(h[:])
+	return err
 }

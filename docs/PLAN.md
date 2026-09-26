@@ -21,7 +21,7 @@ A stable owned null sink survives service restarts to preserve routing and nativ
 
 Cast Streaming negotiates the built-in audio-only receiver, stereo 48 kHz Opus, a UDP endpoint and an explicit playback-delay target. Frames are encrypted independently with session keys, packetized, paced, acknowledged and retained only inside a bounded retransmission window. A stalled acknowledgement stream or a late encoder triggers reconnection rather than an increasing backlog. Requested/reported buffer durations are shown separately from audible latency.
 
-AAC live delivery uses a sliding six-segment playlist, bounded retained files, tokenized URLs and prompt segment publication. Continuous MP3 remains selectable. Capture batching is fixed internally at 40 ms; the MP3 queue is bounded internally. Live segment duration remains adjustable.
+AAC live delivery uses a sliding six-segment playlist, bounded retained files, tokenized URLs and prompt segment publication. Continuous MP3 remains selectable. Capture requests 10 ms batches for Cast Streaming and 40 ms for HTTP delivery. Cast Streaming feeds float PCM through a streaming WAV header with 10 ms demux packets, keeping 20 ms Opus frames; the MP3 queue is bounded internally. Live segment duration remains adjustable.
 
 A background discovery worker maintains expiring device records and publishes snapshots over a persistent private socket subscription. The KCM updates its destination list without replacing unsaved settings; reconnects use the same discovery cache.
 

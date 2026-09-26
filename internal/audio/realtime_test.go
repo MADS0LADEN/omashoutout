@@ -114,3 +114,55 @@ func FuzzOgg(f *testing.F) {
 		readOpus(bytes.NewReader(b), func([]byte) error { return io.EOF })
 	})
 }
+
+// Supplying only 40 ms of PCM must produce an audio packet without needing a
+// larger input batch. The fake capture keeps its pipe open but sends no more.
+func TestRealtimeDoesNotWaitForLargePCMBatch(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("FFmpeg not installed")
+	}
+	dir := t.TempDir()
+	pcm := filepath.Join(dir, "pcm")
+	if err := os.WriteFile(pcm, make([]byte, 48000*2*4*40/1000), 0600); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\ncat '" + strings.ReplaceAll(pcm, "'", "'\"'\"'") + "'\nexec sleep 30\n"
+	if err := os.WriteFile(filepath.Join(dir, "parec"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+	receiver, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer receiver.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	session := cast.StreamingSession{SenderSSRC: 42, ReceiverSSRC: 43, Port: receiver.LocalAddr().(*net.UDPAddr).Port, DelayMS: 40}
+	stream, err := NewRealtime(ctx, config.Default(), "127.0.0.1", "127.0.0.1", session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	receiver.SetReadDeadline(time.Now().Add(2 * time.Second))
+	packet := make([]byte, 1500)
+	for {
+		n, _, err := receiver.ReadFromUDP(packet)
+		if err != nil {
+			t.Fatalf("encoder waited for more than 40 ms of PCM: %v", err)
+		}
+		if n == 28 && packet[1] == 200 {
+			continue
+		}
+		if n < 19 || packet[1] != 255 {
+			t.Fatalf("invalid audio packet: %x", packet[:n])
+		}
+		block, _ := aes.NewCipher(session.Key[:])
+		plain := make([]byte, n-19)
+		cipher.NewCTR(block, session.IV[:]).XORKeyStream(plain, packet[19:n])
+		if opusSamples(plain) != 960 {
+			t.Fatal("short input did not produce a 20 ms Opus packet")
+		}
+		break
+	}
+}
