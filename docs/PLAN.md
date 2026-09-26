@@ -2,7 +2,7 @@
 
 ## Implemented architecture
 
-The Go service owns discovery, Cast session control, persistence and supervision. A small Qt6/KDE Frameworks module supplies the native ShoutOut System Settings page; the audio device itself uses KDE's existing audio backend.
+The Go service owns discovery, Cast session control, persistence and supervision. Settings are exposed through the Omarchy shell bar plugin or the Qt6/KDE Frameworks System Settings module; both talk to the service over the same private Unix socket. The audio device itself uses the desktop's PipeWire session (native gain and mute on the ShoutOut sink).
 
 ```mermaid
 flowchart LR
@@ -12,7 +12,7 @@ flowchart LR
     PCM --> Encoder[FFmpeg Opus, AAC or MP3]
     Encoder --> Transport[Encrypted UDP or receiver-restricted HTTP]
     Transport --> Receiver[Google audio device]
-    Settings[KDE ShoutOut settings] --> IPC[Private Unix socket]
+    Settings[Omarchy plugin or KDE module] --> IPC[Private Unix socket]
     IPC --> Service[Go service]
     Service --> Receiver
 ```
@@ -23,9 +23,9 @@ Cast Streaming negotiates the built-in audio-only receiver, stereo 48 kHz Opus, 
 
 AAC live delivery uses a sliding six-segment playlist, bounded retained files, tokenized URLs and prompt segment publication. Continuous MP3 remains selectable. Capture requests 5 ms batches for Cast Streaming and 40 ms for HTTP delivery. Cast Streaming feeds float PCM through a streaming WAV header with 5 ms demux packets and 5, 10 or 20 ms Opus frames selected from the receiver target; the MP3 queue is bounded internally. Live segment duration remains adjustable.
 
-A background discovery worker maintains expiring device records and publishes snapshots over a persistent private socket subscription. The KCM updates its destination list without replacing unsaved settings; reconnects use the same discovery cache.
+A background discovery worker maintains expiring device records and publishes snapshots over a persistent private socket subscription. Each settings client updates its destination list without replacing unsaved settings; reconnects use the same discovery cache.
 
-The KCM page configures destination discovery/manual `address:port`, full-range receiver volume scale, encoding, bitrate, segment duration, presets and enablement. It shows connection status and native mute/volume. Volume scale applies live; no-op and inactive transport settings do not reconnect. Active transport changes restart the session. Numeric inputs and sliders stay synchronized. Settings travel through a mode-0600 Unix socket. There is no web settings UI.
+The native settings UIs (Omarchy plugin and KDE module) configure destination discovery/manual `address:port`, full-range receiver volume scale, encoding, bitrate, segment duration, presets and enablement. They show connection status and native mute/volume on the ShoutOut sink. Volume scale applies live; no-op and inactive transport settings do not reconnect. Active transport changes restart the session. Numeric inputs and sliders stay synchronized. Settings travel through a mode-0600 Unix socket. There is no web settings UI.
 
 ## Remaining milestones
 

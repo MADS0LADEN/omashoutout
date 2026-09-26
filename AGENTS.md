@@ -8,4 +8,4 @@
 - Keep research local and untracked; never force-add it.
 
 - Hardware testing: receiver volume MUST NEVER exceed 5% (0.05) during agent-run speaker tests. Start muted at 1%, verify reported volume before non-silent testing, and retain appropriate test-signal attenuation. This is a testing restriction, NOT a product volume limit; the user can configure the full receiver range.
-- Use native KDE device volume/mute and native KDE settings. Do not provide a web settings interface. Internal audio transport must not appear as a normal application in KDE's mixer.
+- Use native desktop volume/mute (Omarchy Audio panel or KDE) and native settings (Omarchy shell plugin or KDE module). Do not provide a web settings interface. Internal audio transport must not appear as a normal application in the mixer.

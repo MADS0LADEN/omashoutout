@@ -1,5 +1,7 @@
 # Arch Linux package
 
+The packaged **KDE System Settings module** is separate from the **Omarchy shell bar plugin** (`io.github.lkarlslund.shoutout`). The plugin is installed per user by `./build/shoutout install` on Omarchy and is not part of this package recipe.
+
 Build and install the latest Git version system-wide:
 
 ```sh

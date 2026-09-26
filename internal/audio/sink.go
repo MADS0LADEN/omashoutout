@@ -124,7 +124,7 @@ func RemoveSink(ctx context.Context) error {
 	return nil
 }
 
-// WatchSink follows the same mute and volume state that KDE displays.
+// WatchSink follows the mute and volume state the desktop shows.
 func WatchSink(ctx context.Context) (<-chan SinkState, error) {
 	cmd := exec.CommandContext(ctx, "pactl", "subscribe")
 	out, err := cmd.StdoutPipe()

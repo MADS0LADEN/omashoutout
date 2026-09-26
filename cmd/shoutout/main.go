@@ -22,7 +22,10 @@ import (
 	"github.com/lkarlslund/shoutout/internal/control"
 	"github.com/lkarlslund/shoutout/internal/discovery"
 	"github.com/lkarlslund/shoutout/internal/service"
+	"github.com/lkarlslund/shoutout/omarchy"
 )
+
+const omarchyPluginID = "io.github.lkarlslund.shoutout"
 
 var version = "dev"
 
@@ -51,14 +54,14 @@ Commands:
   run                     Run the audio output and local settings service
   install                 Install and start a systemd user service
   uninstall               Remove installed service, binary and desktop entry
-  configure               Open the native KDE settings module
+  configure               Open ShoutOut settings
   status                  Print the running service status
   config                  Print the current configuration
   apply                   Apply JSON configuration read from stdin
   doctor                  Check runtime prerequisites
   version                 Print build version
 
-Use KDE audio controls for volume and mute.`)
+Use the desktop audio controls for volume and mute. On Omarchy that is the Audio panel.`)
 		return nil
 	case "version":
 		fmt.Println(version)
@@ -117,6 +120,11 @@ Use KDE audio controls for volume and mute.`)
 	case "run":
 		return daemon(path)
 	case "configure":
+		if _, err := exec.LookPath("omarchy-shell"); err == nil {
+			cmd := exec.Command("omarchy-shell", omarchyPluginID, "open")
+			cmd.Env = omarchyShellEnv()
+			return cmd.Run()
+		}
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return err
@@ -140,14 +148,8 @@ Use KDE audio controls for volume and mute.`)
 		return json.NewEncoder(os.Stdout).Encode(r)
 	case "apply":
 		var c config.Config
-		d := json.NewDecoder(io.LimitReader(os.Stdin, 16384))
-		d.DisallowUnknownFields()
-		if err = d.Decode(&c); err != nil {
+		if err = decodeSingleJSONObject(os.Stdin, &c); err != nil {
 			return err
-		}
-		var extra any
-		if d.Decode(&extra) != io.EOF {
-			return errors.New("unexpected trailing data")
 		}
 		r, err := control.Call(control.Request{Method: "configure", Config: &c})
 		if err != nil {
@@ -194,7 +196,7 @@ func daemon(path string) error {
 	defer func() { cancel(); <-discoveryDone }()
 	done := make(chan error, 1)
 	go func() { done <- control.Run(ctx, s, listener); cancel() }()
-	slog.Info("native KDE control ready")
+	slog.Info("native control ready")
 	err = s.Run(ctx)
 	cancel()
 	controlErr := <-done
@@ -256,6 +258,16 @@ func install(remove bool) error {
 	desktopPath := filepath.Join(data, "applications", "shoutout.desktop")
 	environmentPath := filepath.Join(conf, "plasma-workspace", "env", "shoutout.sh")
 	if remove {
+		if omarchyCLIAvailable() {
+			pluginDir := filepath.Join(conf, "omarchy", "plugins", omarchyPluginID)
+			if _, statErr := os.Stat(pluginDir); statErr == nil {
+				cmd := exec.Command("omarchy", "plugin", "remove", omarchyPluginID, "--yes")
+				cmd.Env = omarchyShellEnv()
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				_ = cmd.Run()
+			}
+		}
 		cmd := exec.Command("systemctl", "--user", "disable", "--now", "shoutout.service")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -321,15 +333,15 @@ func install(remove bool) error {
 		if err = replaceFile(moduleDest, moduleData, 0755); err != nil {
 			return err
 		}
-	}
-	// Plasma sources this on login so its standard Settings launcher finds the module.
-	if err = os.MkdirAll(filepath.Dir(environmentPath), 0755); err != nil {
-		return err
-	}
-	pluginRoot := filepath.Join(home, ".local", "lib", "qt6", "plugins")
-	quotedRoot := "'" + strings.ReplaceAll(pluginRoot, "'", "'\"'\"'") + "'"
-	if err = os.WriteFile(environmentPath, []byte("export QT_PLUGIN_PATH="+quotedRoot+"${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}\n"), 0644); err != nil {
-		return err
+		// Plasma sources this on login so its standard Settings launcher finds the module.
+		if err = os.MkdirAll(filepath.Dir(environmentPath), 0755); err != nil {
+			return err
+		}
+		pluginRoot := filepath.Join(home, ".local", "lib", "qt6", "plugins")
+		quotedRoot := "'" + strings.ReplaceAll(pluginRoot, "'", "'\"'\"'") + "'"
+		if err = os.WriteFile(environmentPath, []byte("export QT_PLUGIN_PATH="+quotedRoot+"${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}\n"), 0644); err != nil {
+			return err
+		}
 	}
 	// systemd interprets percent specifiers even in quoted command arguments.
 	escaped := strconv.Quote(strings.ReplaceAll(binaryPath, "%", "%%"))
@@ -349,7 +361,99 @@ func install(remove bool) error {
 			return err
 		}
 	}
-	fmt.Println("Installed and started. Use KDE Audio for volume/mute and ShoutOut native settings for destination and presets.")
+	if _, err := exec.LookPath("omarchy-shell"); err == nil {
+		if err = installOmarchyPlugin(conf); err != nil {
+			return err
+		}
+	}
+	fmt.Println("Installed and started. Use the desktop audio controls for volume and mute, and ShoutOut settings for destination and presets.")
+	return nil
+}
+
+func omarchyShellEnv() []string {
+	env := make([]string, 0, len(os.Environ())+1)
+	for _, entry := range os.Environ() {
+		if strings.HasPrefix(entry, "OMARCHY_SHELL_IPC_TIMEOUT=") {
+			continue
+		}
+		env = append(env, entry)
+	}
+	// Plugin rescan walks every installed widget and often exceeds the
+	// shell helper's 2s default.
+	return append(env, "OMARCHY_SHELL_IPC_TIMEOUT=30s")
+}
+
+func omarchyCLIAvailable() bool {
+	if _, err := exec.LookPath("omarchy-shell"); err == nil {
+		return true
+	}
+	_, err := exec.LookPath("omarchy")
+	return err == nil
+}
+
+func installOmarchyPlugin(confDir string) error {
+	pluginDir := filepath.Join(confDir, "omarchy", "plugins", omarchyPluginID)
+	if err := omarchy.InstallDir(pluginDir); err != nil {
+		return err
+	}
+	cmd := exec.Command("omarchy-shell", "shell", "rescanPlugins")
+	cmd.Env = omarchyShellEnv()
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	if !omarchyPluginInShellJSON(filepath.Join(confDir, "omarchy", "shell.json"), omarchyPluginID) {
+		cmd = exec.Command("omarchy", "plugin", "enable", omarchyPluginID, "--section", "right")
+		cmd.Env = omarchyShellEnv()
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func omarchyPluginInShellJSON(path, pluginID string) bool {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var doc struct {
+		Bar struct {
+			Layout map[string][]json.RawMessage `json:"layout"`
+		} `json:"bar"`
+	}
+	if err := json.Unmarshal(b, &doc); err != nil {
+		return false
+	}
+	for _, section := range doc.Bar.Layout {
+		for _, raw := range section {
+			var item struct {
+				ID string `json:"id"`
+			}
+			if json.Unmarshal(raw, &item) == nil && item.ID == pluginID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func decodeSingleJSONObject(r io.Reader, dest any) error {
+	d := json.NewDecoder(io.LimitReader(r, 16384))
+	d.DisallowUnknownFields()
+	if err := d.Decode(dest); err != nil {
+		return err
+	}
+	rest, err := io.ReadAll(d.Buffered())
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(string(rest)) != "" {
+		return errors.New("unexpected trailing data")
+	}
 	return nil
 }
 

@@ -13,7 +13,7 @@ test:
 	go test -race ./...
 	go vet ./...
 
-install: build kde
+install: build
 	./build/shoutout install
 
 uninstall:

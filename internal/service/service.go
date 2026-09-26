@@ -134,7 +134,14 @@ func (s *Service) Run(ctx context.Context) error {
 		if !c.Enabled || c.Host == "" && c.DeviceID == "" {
 			cancel()
 			s.state("idle", "Select a destination and enable streaming in settings.")
-			if !s.wait(ctx, 0) {
+			if native, err := audio.ReadSink(ctx); err == nil {
+				s.mu.Lock()
+				s.status.SinkMuted = native.Muted
+				s.status.SinkVolume = native.VolumePercent()
+				s.status.Updated = time.Now()
+				s.mu.Unlock()
+			}
+			if !s.wait(ctx, 2*time.Second) {
 				return nil
 			}
 			continue
@@ -277,7 +284,7 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 	stream.Allowed.Store(!native.Muted)
 	mark("playback volume verification")
 
-	s.state("streaming", "Connected. Select ShoutOut in KDE's audio output menu.")
+	s.state("streaming", "Connected. Select ShoutOut as the audio output.")
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -364,7 +371,7 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 				return errTakenOver
 			}
 			s.mu.Lock()
-			s.status = Status{RequestedDelayMS: c.TargetDelayMS, ReceiverDelayMS: stats.ReceiverDelayMS, AudioFrames: stats.Frames, AcknowledgedFrame: stats.Acknowledged, Retransmits: stats.Retransmits, FeedbackReports: stats.Feedback, SinkMuted: native.Muted, SinkVolume: native.VolumePercent(), PlaybackSeconds: ms.CurrentTime, State: "streaming", Message: "Select ShoutOut in KDE. Receiver latency has not been measured.", Sink: audio.SinkName, Device: c.DeviceName, PlayerState: ms.PlayerState, ReceiverVolume: rs.Volume.Level, ReceiverMuted: rs.Volume.Muted, EncodedBytes: stream.Bytes.Load(), MediaRequests: stream.Requests.Load(), Subscribers: stream.Subscribers(), Peak: math.Float64frombits(stream.Peak.Load()), Updated: time.Now()}
+			s.status = Status{RequestedDelayMS: c.TargetDelayMS, ReceiverDelayMS: stats.ReceiverDelayMS, AudioFrames: stats.Frames, AcknowledgedFrame: stats.Acknowledged, Retransmits: stats.Retransmits, FeedbackReports: stats.Feedback, SinkMuted: native.Muted, SinkVolume: native.VolumePercent(), PlaybackSeconds: ms.CurrentTime, State: "streaming", Message: "Select ShoutOut as the audio output. Receiver latency has not been measured.", Sink: audio.SinkName, Device: c.DeviceName, PlayerState: ms.PlayerState, ReceiverVolume: rs.Volume.Level, ReceiverMuted: rs.Volume.Muted, EncodedBytes: stream.Bytes.Load(), MediaRequests: stream.Requests.Load(), Subscribers: stream.Subscribers(), Peak: math.Float64frombits(stream.Peak.Load()), Updated: time.Now()}
 			s.mu.Unlock()
 			if ms.PlayerState == "IDLE" {
 				return fmt.Errorf("receiver stopped audio: %s", ms.IdleReason)
