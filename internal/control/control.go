@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lkarlslund/shoutout/internal/config"
+	"github.com/lkarlslund/shoutout/internal/discovery"
 	"github.com/lkarlslund/shoutout/internal/service"
 )
 
@@ -21,9 +22,10 @@ type Request struct {
 	Config *config.Config `json:"config,omitempty"`
 }
 type Response struct {
-	Config config.Config  `json:"config"`
-	Status service.Status `json:"status"`
-	Error  string         `json:"error,omitempty"`
+	Devices []discovery.Device `json:"devices"`
+	Config  config.Config      `json:"config"`
+	Status  service.Status     `json:"status"`
+	Error   string             `json:"error,omitempty"`
 }
 
 func Path() (string, error) {
@@ -82,6 +84,9 @@ func Run(ctx context.Context, s *service.Service, l net.Listener) error {
 			err := d.Decode(&req)
 			if err == nil {
 				switch req.Method {
+				case "watch-devices":
+					watchDevices(ctx, s, conn)
+					return
 				case "status":
 				case "configure":
 					if req.Config == nil {
@@ -93,7 +98,7 @@ func Run(ctx context.Context, s *service.Service, l net.Listener) error {
 					err = errors.New("unknown method")
 				}
 			}
-			result := Response{Config: s.Config(), Status: s.Status()}
+			result := Response{Config: s.Config(), Status: s.Status(), Devices: s.Discovery.Snapshot()}
 			if err != nil {
 				result.Error = err.Error()
 			}
@@ -121,4 +126,27 @@ func Call(req Request) (Response, error) {
 		err = errors.New(r.Error)
 	}
 	return r, err
+}
+
+func watchDevices(ctx context.Context, s *service.Service, conn net.Conn) {
+	conn.SetDeadline(time.Time{})
+	updates, unsubscribe := s.Discovery.Subscribe()
+	defer unsubscribe()
+	closed := make(chan struct{})
+	go func() { var b [1]byte; conn.Read(b[:]); close(closed) }()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-closed:
+			return
+		case devices := <-updates:
+			conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if json.NewEncoder(conn).Encode(struct {
+				Devices []discovery.Device `json:"devices"`
+			}{devices}) != nil {
+				return
+			}
+		}
+	}
 }

@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"sort"
 	"strings"
@@ -22,10 +23,11 @@ type Device struct {
 }
 
 type records struct {
-	mu  sync.Mutex
-	txt map[string]map[string]string
-	srv map[string]dnsmessage.SRVResource
-	ips map[string]string
+	mu      sync.Mutex
+	txt     map[string]map[string]string
+	srv     map[string]dnsmessage.SRVResource
+	ips     map[string]string
+	expires map[string]time.Time
 }
 
 func (r *records) ingest(data []byte) {
@@ -38,6 +40,11 @@ func (r *records) ingest(data []byte) {
 	all := append(append(m.Answers, m.Authorities...), m.Additionals...)
 	for _, a := range all {
 		name := strings.ToLower(a.Header.Name.String())
+		if r.expires == nil {
+			r.expires = make(map[string]time.Time)
+		}
+		ttl := min(time.Duration(a.Header.TTL)*time.Second, 45*time.Second)
+		r.expires[fmt.Sprintf("%d:%s", a.Header.Type, name)] = time.Now().Add(ttl)
 		switch b := a.Body.(type) {
 		case *dnsmessage.TXTResource:
 			p := map[string]string{}
@@ -58,7 +65,7 @@ func (r *records) ingest(data []byte) {
 
 // Discover uses IPv4 mDNS directly and does not require a system discovery daemon.
 func Discover(ctx context.Context) ([]Device, error) {
-	return discover(ctx, "")
+	return discover(ctx, "", nil, nil)
 }
 
 // Find returns as soon as all address records for the selected receiver arrive.
@@ -66,7 +73,7 @@ func Find(ctx context.Context, id string) (Device, error) {
 	if id == "" {
 		return Device{}, errors.New("receiver ID is empty")
 	}
-	devices, err := discover(ctx, id)
+	devices, err := discover(ctx, id, nil, nil)
 	if err != nil {
 		return Device{}, err
 	}
@@ -81,12 +88,14 @@ func Find(ctx context.Context, id string) (Device, error) {
 	return Device{}, errors.New("selected receiver not found")
 }
 
-func discover(ctx context.Context, id string) ([]Device, error) {
+func discover(ctx context.Context, id string, publish func([]Device), r *records) ([]Device, error) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return nil, err
 	}
-	r := records{txt: map[string]map[string]string{}, srv: map[string]dnsmessage.SRVResource{}, ips: map[string]string{}}
+	if r == nil {
+		r = &records{txt: map[string]map[string]string{}, srv: map[string]dnsmessage.SRVResource{}, ips: map[string]string{}}
+	}
 	name, _ := dnsmessage.NewName("_googlecast._tcp.local.")
 	query, err := (&dnsmessage.Message{Questions: []dnsmessage.Question{{Name: name, Type: dnsmessage.TypePTR, Class: dnsmessage.ClassINET}}}).Pack()
 	if err != nil {
@@ -145,12 +154,17 @@ func discover(ctx context.Context, id string) ([]Device, error) {
 	for _, c := range connections {
 		_, _ = c.WriteToUDP(query, group)
 	}
+	ticks := 0
 loop:
 	for {
 		select {
 		case <-ctx.Done():
 			break loop
 		case <-updated:
+			if publish != nil {
+				r.expire(time.Now())
+				publish(r.devices())
+			}
 			if id != "" {
 				for _, d := range r.devices() {
 					if d.ID == id {
@@ -159,6 +173,14 @@ loop:
 				}
 			}
 		case <-timer.C:
+			if publish != nil {
+				r.expire(time.Now())
+				publish(r.devices())
+			}
+			ticks++
+			if publish != nil && ticks%10 != 0 {
+				continue
+			}
 			for _, c := range connections {
 				_, _ = c.WriteToUDP(query, group)
 			}
@@ -177,11 +199,31 @@ func (r *records) devices() []Device {
 		}
 		p := r.txt[instance]
 		host := r.ips[strings.ToLower(srv.Target.String())]
-		if host == "" || p["fn"] == "" {
+		if host == "" || p["fn"] == "" || p["id"] == "" {
 			continue
 		}
 		devices = append(devices, Device{ID: p["id"], Name: p["fn"], Model: p["md"], Host: host, Port: int(srv.Port)})
 	}
 	sort.Slice(devices, func(i, j int) bool { return devices[i].Name < devices[j].Name })
 	return devices
+}
+
+func (r *records) expire(now time.Time) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for key, until := range r.expires {
+		if now.Before(until) {
+			continue
+		}
+		kind, name, _ := strings.Cut(key, ":")
+		switch kind {
+		case "16":
+			delete(r.txt, name)
+		case "33":
+			delete(r.srv, name)
+		case "1":
+			delete(r.ips, name)
+		}
+		delete(r.expires, key)
+	}
 }

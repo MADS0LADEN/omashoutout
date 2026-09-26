@@ -50,3 +50,20 @@ connection setup through enabling playback (discovery 4 ms, TLS 33 ms, launch
 not a measurement of the audible interruption or end-to-end audio latency.
 Race tests and vet passed, including receiver confirmation, minimal mute-only
 commands, unchanged volume verification, and fragmented discovery records.
+
+## Background discovery and live settings
+
+The daemon now starts continuous discovery independently of playback enablement
+and open settings windows. It probes every ten seconds and expires individual
+records at their advertised TTL or 45 seconds, whichever is shorter. A private
+socket subscription sends the initial cached list and subsequent changes to the
+KDE module. Slow subscribers receive the latest snapshot without blocking the
+worker. Reconnect lookup uses this shared cache. Socket reopening retains records
+and refreshes network interface membership once per minute.
+
+Race tests cover arrivals, departures, renewed expiry, short TTLs, goodbye
+records, subscriber isolation, coalescing, cancellation, and control shutdown
+with an open subscription. The native smoke check received five live devices
+without a discovery button and verified the combined address:port field. The
+installed service remained streaming with the existing user settings. Physical
+device disconnection was not exercised; expiry uses synthetic DNS records in tests.

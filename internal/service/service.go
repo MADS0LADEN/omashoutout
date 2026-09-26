@@ -44,6 +44,7 @@ type Status struct {
 }
 
 type Service struct {
+	Discovery     discovery.Browser
 	mu            sync.Mutex
 	config        config.Config
 	path          string
@@ -191,7 +192,7 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 	s.state("connecting", "Connecting muted; verifying the configured receiver volume.")
 	if c.DeviceID != "" {
 		scanCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		device, err := discovery.Find(scanCtx, c.DeviceID)
+		device, err := s.Discovery.Find(scanCtx, c.DeviceID)
 		cancel()
 		if err == nil {
 			c.Host, c.Port, c.DeviceName = device.Host, device.Port, device.Name

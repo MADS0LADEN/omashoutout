@@ -12,8 +12,8 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLocalSocket>
 #include <QProcess>
-#include <QPushButton>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
@@ -46,16 +46,10 @@ public:
         QComboBox::AdjustToMinimumContentsLengthWithIcon);
     devices->setMinimumContentsLength(30);
     form->addRow(tr("Destination:"), devices);
-    auto scan = new QPushButton(tr("Find audio devices"), widget());
-    scan->setObjectName("discover");
-    form->addRow(QString(), scan);
     host = new QLineEdit(widget());
     host->setObjectName("receiverAddress");
+    host->setPlaceholderText(tr("192.168.1.10:8009"));
     form->addRow(tr("Receiver address:"), host);
-    port = new QSpinBox(widget());
-    port->setRange(1, 65535);
-    port->setObjectName("receiverPort");
-    form->addRow(tr("Receiver port:"), port);
     scale = new QDoubleSpinBox(widget());
     scale->setRange(0, 100);
     scale->setDecimals(1);
@@ -114,13 +108,11 @@ public:
     error->setWordWrap(true);
     layout->addWidget(error);
     layout->addStretch();
-    connect(scan, &QPushButton::clicked, this, &ShoutoutKCM::discover);
     connect(devices, &QComboBox::activated, this, [this](int i) {
       auto d = devices->itemData(i).toJsonObject();
       if (d.isEmpty())
         return;
-      host->setText(d["host"].toString());
-      port->setValue(d["port"].toInt());
+      host->setText(endpoint(d["host"].toString(), d["port"].toInt()));
       config["device_id"] = d["id"];
       config["device_name"] = d["name"];
       markAsChanged();
@@ -128,11 +120,12 @@ public:
     connect(host, &QLineEdit::textEdited, this, [this] {
       config["device_id"] = "";
       config["device_name"] = host->text();
+      updateDevices();
       markAsChanged();
     });
     connect(scale, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
             [this] { markAsChanged(); });
-    for (auto spin : {port, segment, delay})
+    for (auto spin : {segment, delay})
       connect(spin, qOverload<int>(&QSpinBox::valueChanged), this,
               [this] { markAsChanged(); });
     connect(enabled, &QCheckBox::toggled, this, [this] { markAsChanged(); });
@@ -180,6 +173,25 @@ public:
     timer->setInterval(2000);
     connect(timer, &QTimer::timeout, this, &ShoutoutKCM::refreshStatus);
     timer->start();
+    deviceSocket = new QLocalSocket(this);
+    connect(deviceSocket, &QLocalSocket::connected, this, [this] {
+      deviceSocket->write("{\"method\":\"watch-devices\"}\n");
+    });
+    connect(deviceSocket, &QLocalSocket::readyRead, this, [this] {
+      while (deviceSocket->canReadLine()) {
+        auto doc = QJsonDocument::fromJson(deviceSocket->readLine());
+        if (doc.isObject()) {
+          liveDevices = doc.object()["devices"].toArray();
+          updateDevices();
+        }
+      }
+    });
+    connect(deviceSocket, &QLocalSocket::disconnected, this, [this] {
+      liveDevices = {};
+      updateDevices();
+    });
+    connect(timer, &QTimer::timeout, this, &ShoutoutKCM::subscribeDevices);
+    subscribeDevices();
   }
   void load() override {
     run({"config"}, {}, [this](QByteArray bytes) {
@@ -198,8 +210,21 @@ public:
     config["codec"] = codec->currentData().toString();
     config["target_delay_ms"] = delay->value();
     config["segment_ms"] = segment->value();
-    config["host"] = host->text().trimmed();
-    config["port"] = port->value();
+    auto address = host->text().trimmed();
+    int separator = address.lastIndexOf(':');
+    bool validPort = false;
+    int receiverPort = address.mid(separator + 1).toInt(&validPort);
+    QString receiverHost = address.left(separator);
+    if (receiverHost.startsWith('[') && receiverHost.endsWith(']'))
+      receiverHost = receiverHost.mid(1, receiverHost.size() - 2);
+    if (separator <= 0 || receiverHost.isEmpty() || !validPort ||
+        receiverPort < 1 || receiverPort > 65535) {
+      error->setText(tr("Enter the receiver as address:port, for example "
+                        "192.168.1.10:8009."));
+      return;
+    }
+    config["host"] = receiverHost;
+    config["port"] = receiverPort;
     config["receiver_volume"] = scale->value() / 100.0;
     config["preset"] = preset->currentData().toString();
     config["bitrate_kbps"] = bitrate->currentData().toInt();
@@ -266,7 +291,9 @@ private:
   QJsonObject config;
   QComboBox *devices, *preset, *bitrate, *codec;
   QLineEdit *host;
-  QSpinBox *port, *segment, *delay;
+  QSpinBox *segment, *delay;
+  QLocalSocket *deviceSocket;
+  QJsonArray liveDevices;
   QDoubleSpinBox *scale;
   QCheckBox *enabled;
   QLabel *status, *error;
@@ -315,30 +342,61 @@ private:
     delay->setValue(config["target_delay_ms"].toInt(400));
     segment->parentWidget()->setEnabled(codec->currentData() == "aac-hls");
     delay->parentWidget()->setEnabled(codec->currentData() == "cast-opus");
-    host->setText(config["host"].toString());
-    port->setValue(config["port"].toInt(8009));
+    host->setText(
+        endpoint(config["host"].toString(), config["port"].toInt(8009)));
     scale->setValue(config["receiver_volume"].toDouble() * 100);
     preset->setCurrentIndex(preset->findData(config["preset"].toString()));
     bitrate->setCurrentIndex(bitrate->findData(config["bitrate_kbps"].toInt()));
     enabled->setChecked(config["enabled"].toBool());
-    devices->clear();
-    devices->addItem(config["device_name"].toString(), QJsonObject{});
+    updateDevices();
     loading = false;
   }
-  void discover() {
-    error->clear();
-    run({"devices"}, {}, [this](QByteArray bytes) {
-      auto list = QJsonDocument::fromJson(bytes).array();
-      devices->clear();
-      devices->addItem(tr("Choose a destination"), QJsonObject{});
-      for (auto value : list) {
-        auto d = value.toObject();
-        devices->addItem(d["name"].toString() + " — " + d["model"].toString(),
-                         d);
-        if (d["id"] == config["device_id"])
-          devices->setCurrentIndex(devices->count() - 1);
+  QString endpoint(QString address, int port) const {
+    if (address.contains(':'))
+      address = "[" + address + "]";
+    return address + ":" + QString::number(port);
+  }
+  void subscribeDevices() {
+    if (deviceSocket->state() == QLocalSocket::UnconnectedState)
+      deviceSocket->connectToServer(
+          QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation) +
+          "/shoutout.sock");
+  }
+  void updateDevices() {
+    QSignalBlocker blocker(devices);
+    const auto selected = config["device_id"].toString();
+    // Change rows in place so an open dropdown is not reset on each update.
+    for (int i = devices->count() - 1; i >= 0; --i) {
+      const auto id = devices->itemData(i).toJsonObject()["id"].toString();
+      bool present = false;
+      for (auto value : liveDevices)
+        if (value.toObject()["id"].toString() == id)
+          present = true;
+      if (!present)
+        devices->removeItem(i);
+    }
+    int selection = -1;
+    for (auto value : liveDevices) {
+      auto d = value.toObject();
+      int row = -1;
+      for (int i = 0; i < devices->count(); ++i)
+        if (devices->itemData(i).toJsonObject()["id"] == d["id"])
+          row = i;
+      if (row < 0) {
+        row = devices->count();
+        devices->addItem(QString());
       }
-    });
+      devices->setItemText(row, d["name"].toString() + " — " +
+                                    d["model"].toString());
+      devices->setItemData(row, d);
+      if (!selected.isEmpty() && d["id"].toString() == selected)
+        selection = row;
+    }
+    devices->setPlaceholderText(
+        selected.isEmpty()
+            ? tr("Choose a destination")
+            : tr("%1 (unavailable)").arg(config["device_name"].toString()));
+    devices->setCurrentIndex(selection);
   }
   void refreshStatus() {
     if (statusBusy)

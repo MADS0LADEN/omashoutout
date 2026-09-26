@@ -4,6 +4,7 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QSlider>
 #include <QSpinBox>
@@ -24,24 +25,23 @@ int main(int argc, char **argv) {
   w->resize(780, 660);
   w->show();
   module->load();
-  QTimer::singleShot(1000, w, [&] {
-    auto scan = w->findChild<QPushButton *>("discover");
-    if (!scan) {
+  QTimer::singleShot(7000, w, [&] {
+    auto address = w->findChild<QLineEdit *>("receiverAddress");
+    if (!address || !address->text().contains(':') ||
+        w->findChild<QSpinBox *>("receiverPort")) {
       app.exit(1);
       return;
     }
-    scan->click();
-  });
-  QTimer::singleShot(7000, w, [&] {
     auto scale = w->findChild<QDoubleSpinBox *>("volumeScale");
     auto devices = w->findChild<QComboBox *>("destination");
     auto status = w->findChild<QLabel *>("status");
     auto codec = w->findChild<QComboBox *>("codec");
     auto segment = w->findChild<QSpinBox *>("segmentMS");
-    if (!codec || codec->count() != 3 || !segment ||
-        segment->minimum() != 250 || segment->maximum() != 2000 || !scale ||
-        scale->maximum() != 100 || !devices || devices->count() < 2 ||
-        devices->width() < 300 || !status || status->text().isEmpty()) {
+    if (w->findChild<QPushButton *>("discover") || !codec ||
+        codec->count() != 3 || !segment || segment->minimum() != 250 ||
+        segment->maximum() != 2000 || !scale || scale->maximum() != 100 ||
+        !devices || devices->count() < 2 || devices->width() < 300 || !status ||
+        status->text().isEmpty()) {
       fprintf(stderr, "Native controls or discovery failed\n");
       app.exit(1);
       return;

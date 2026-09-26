@@ -23,7 +23,9 @@ Cast Streaming negotiates the built-in audio-only receiver, stereo 48 kHz Opus, 
 
 AAC live delivery uses a sliding six-segment playlist, bounded retained files, tokenized URLs and prompt segment publication. Continuous MP3 remains selectable. Capture batching is fixed internally at 40 ms; the MP3 queue is bounded internally. Live segment duration remains adjustable.
 
-The KCM page configures destination discovery/manual address, full-range receiver volume scale, encoding, bitrate, segment duration, presets and enablement. It shows connection status and native mute/volume. Volume scale applies live; no-op and inactive transport settings do not reconnect. Active transport changes restart the session. Numeric inputs and sliders stay synchronized. Settings travel through a mode-0600 Unix socket. There is no web settings UI.
+A background discovery worker maintains expiring device records and publishes snapshots over a persistent private socket subscription. The KCM updates its destination list without replacing unsaved settings; reconnects use the same discovery cache.
+
+The KCM page configures destination discovery/manual `address:port`, full-range receiver volume scale, encoding, bitrate, segment duration, presets and enablement. It shows connection status and native mute/volume. Volume scale applies live; no-op and inactive transport settings do not reconnect. Active transport changes restart the session. Numeric inputs and sliders stay synchronized. Settings travel through a mode-0600 Unix socket. There is no web settings UI.
 
 ## Remaining milestones
 

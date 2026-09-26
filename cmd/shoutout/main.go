@@ -64,13 +64,11 @@ Use KDE audio controls for volume and mute.`)
 		fmt.Println(version)
 		return nil
 	case "devices":
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		d, err := discovery.Discover(ctx)
+		r, err := control.Call(control.Request{Method: "status"})
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(os.Stdout).Encode(d)
+		return json.NewEncoder(os.Stdout).Encode(r.Devices)
 	case "setup":
 		f := flag.NewFlagSet("setup", flag.ContinueOnError)
 		name := f.String("device", "", "receiver friendly name")
@@ -190,6 +188,9 @@ func daemon(path string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	s := service.New(c, path)
+	discoveryDone := make(chan struct{})
+	go func() { defer close(discoveryDone); s.Discovery.Run(ctx) }()
+	defer func() { cancel(); <-discoveryDone }()
 	done := make(chan error, 1)
 	go func() { done <- control.Run(ctx, s, listener); cancel() }()
 	slog.Info("native KDE control ready")

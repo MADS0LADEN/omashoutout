@@ -22,7 +22,7 @@ The per-user installer copies the service binary, native settings plugin, deskto
 
 ## Use
 
-Choose a detected receiver or enter its address and port. One destination is supported at a time; advertised speaker groups can be selected but have not been validated. Select Shoutout in KDE's audio selector, unmute it and route your applications normally.
+Choose a detected receiver or enter `address:port` (for example `192.168.1.10:8009`). The service discovers receivers continuously from startup and pushes live changes to the settings dropdown. Devices disappear after 45 seconds without refreshed discovery records, or earlier when they announce departure. Your selected destination is retained if it becomes unavailable. One destination is supported at a time; advertised speaker groups can be selected but have not been validated. Select Shoutout in KDE's audio selector, unmute it and route your applications normally.
 
 - KDE's normal output slider and mute are authoritative. Internal capture is marked virtual so it does not appear as an application in KDE's mixer.
 - Receiver volume scale is configurable from **0–100%**. Keep it low for sensitive speakers. The 5% maximum applies only to development speaker tests.

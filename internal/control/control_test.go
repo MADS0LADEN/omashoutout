@@ -3,10 +3,12 @@ package control
 import (
 	"context"
 	"encoding/json"
+	"github.com/lkarlslund/shoutout/internal/discovery"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lkarlslund/shoutout/internal/config"
 	"github.com/lkarlslund/shoutout/internal/service"
@@ -57,5 +59,47 @@ func TestPrivateSocketConfiguration(t *testing.T) {
 	cancel()
 	if err = <-done; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDeviceSubscriptionInitialSnapshotAndShutdown(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	l, err := Listen()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := service.New(config.Default(), filepath.Join(t.TempDir(), "config.json"))
+	done := make(chan error, 1)
+	go func() { done <- Run(ctx, s, l) }()
+	path, _ := Path()
+	conn, err := net.Dial("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(time.Second))
+	if err := json.NewEncoder(conn).Encode(Request{Method: "watch-devices"}); err != nil {
+		t.Fatal(err)
+	}
+	var response struct {
+		Devices []discovery.Device `json:"devices"`
+	}
+	if err := json.NewDecoder(conn).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Devices == nil {
+		t.Fatal("initial devices should be an empty array")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("subscription prevented shutdown")
 	}
 }
