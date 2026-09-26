@@ -1,15 +1,15 @@
 # Maintainer: Lars Karlslund
 pkgname=shoutout-git
 pkgver=0.1.0.r22.g45f7313
-pkgrel=1
+pkgrel=2
 pkgdesc='Use your Google Audio compatible speakers for system audio, with native KDE settings'
 arch=('x86_64')
 url='https://github.com/lkarlslund/shoutout'
 license=('MIT')
 install=shoutout.install
 depends=('ffmpeg' 'libpulse' 'pipewire-pulse' 'qt6-base' 'kcmutils'
-         'kcoreaddons' 'systemsettings' 'systemd' 'glibc' 'gcc-libs')
-makedepends=('git' 'go>=1.26' 'cmake' 'ninja')
+         'kcoreaddons' 'systemsettings' 'plasma-pa' 'systemd' 'glibc' 'libgcc' 'libstdc++')
+makedepends=('git' 'go>=2:1.26' 'cmake' 'ninja')
 provides=('shoutout')
 conflicts=('shoutout')
 source=('shoutout::git+https://github.com/lkarlslund/shoutout.git#branch=main')

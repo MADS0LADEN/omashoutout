@@ -40,3 +40,17 @@ This recipe tracks Git `main`; it has not been submitted to the AUR.
 Remove it with `sudo pacman -Rns shoutout-git`; the package stops its running
 user services and removes automatic startup. Personal settings remain. An existing virtual
 output disappears when the audio session ends.
+
+
+## Dependencies
+
+Runtime dependencies cover FFmpeg encoding, `pactl`/`parec` from `libpulse`,
+PipeWire's PulseAudio server, Qt6 and KDE libraries, System Settings, KDE's
+`plasma-pa` audio controls, systemd, and the directly linked C/C++ runtimes.
+PipeWire pulls in its session-manager dependency. Discovery runs inside
+ShoutOut and does not require a separate discovery service.
+
+Build dependencies are Git, Go 1.26 or newer, CMake and Ninja, on top of Arch's
+standard `base-devel` tools. Arch's Go package uses epoch `2`, so the version
+constraint is `go>=2:1.26`. FFmpeg supplies AAC and Opus encoding; separate
+encoder development packages are not needed.
