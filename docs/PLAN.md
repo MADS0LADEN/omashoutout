@@ -1,5 +1,7 @@
 # Implementation plan
 
+Implementation update (2026-09-26): the Go service, continuous MP3 playback, discovery, KDE output, volume scaling, preset controls, settings UI, and per-user installer are implemented and running. See [validation](VALIDATION.md) for evidence and limits. The architecture below remains the design reference; native distro packages, alternative encodings, and latency tuning remain future work.
+
 ## Scope and priorities
 
 1. Deliver working playback through a normal output named Shoutout in KDE's audio selector.
@@ -82,7 +84,7 @@ Keep three concepts separate in settings: desktop volume, stream attenuation, an
 
 Apply a configurable non-positive trim in dB before encoding: amplitude multiplier = `10^(trim_db/20)`. For example, -30 dB is approximately 0.0316 of input amplitude, and -20 dB is 0.1. Use float PCM and bound output peaks so desktop amplification above 100% cannot defeat the configured stream ceiling. A peak clamp is a last-resort bound and may distort; calibrate the useful range and add a limiter only if needed.
 
-Provisional onboarding defaults: -30 dB stream trim, receiver ceiling 10%, and muted until the user completes quiet calibration. These are starting values, not a guaranteed sound-pressure limit. Never set the receiver to full volume as part of connecting. Confirm a muted or bounded receiver state before serving non-silent PCM. Reconnect and device switching must preserve limits and fade in without a full-level burst.
+Provisional onboarding defaults: -40 dB stream trim, receiver volume 1%, absolute receiver ceiling 5%, and muted until the user completes quiet calibration. These are starting values, not a guaranteed sound-pressure limit. Never set the receiver to full volume as part of connecting. Confirm a muted or bounded receiver state before serving non-silent PCM. Reconnect and device switching must preserve limits and fade in without a full-level burst.
 
 Keep desktop volume local in the first version; do not mirror its 0–100% range directly to hardware volume. This preserves slider resolution inside an attenuated listening range. If hardware volume changes externally, report it and reconcile the configured ceiling while this session owns playback. Local attenuation remains necessary because remote volume updates are asynchronous. Offer immediate receiver mute as well as local mute, since already-buffered audio can outlast a local mute command.
 
@@ -136,7 +138,7 @@ Start with Arch packaging for the current environment, then Debian/Ubuntu packag
 
 When implementation starts, CI should run formatting checks, `go test ./...`, `go vet ./...`, and race tests for concurrent state/stream code. Test gain boundaries (including invalid/non-finite settings), muted startup, reconnect ordering, queue limits, cancellation, malformed Cast frames, and config migrations. Use protocol simulations for timeouts/takeover; fuzz framing and config parsers. Hardware validation remains separate from unit tests.
 
-Release checks: clean installation on supported distros; output selectable in Plasma; quiet calibration; 30-minute delay/drift run; deliberate packet loss/disconnection; restart/suspend recovery; zero stale backlog; complete uninstall. Record device model/firmware, codec, format, connection type, buffering parameters, and measurement uncertainty. No playback, latency, or installer validation has been performed yet.
+Release checks: clean installation on supported distros; output selectable in Plasma; quiet calibration; 30-minute delay/drift run; deliberate packet loss/disconnection; restart/suspend recovery; zero stale backlog; complete uninstall. Record device model/firmware, codec, format, connection type, buffering parameters, and measurement uncertainty. Playback and the per-user installer have been exercised locally; measured latency, long-duration drift, and fresh distro installation remain outstanding. See [validation](VALIDATION.md).
 
 ## Platform references
 
