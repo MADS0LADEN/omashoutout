@@ -24,7 +24,7 @@ For **KDE Plasma 6 + PipeWire**. Build from source with Go, FFmpeg and the Qt6/K
 On Arch Linux, use the [system-wide package](ARCH.md):
 
 ```sh
-makepkg -si
+make package-install
 shoutout configure
 ```
 
@@ -32,7 +32,7 @@ Or install from source for your user:
 
 ```sh
 make build kde
-./bin/shoutout install
+./build/shoutout install
 shoutout configure
 ```
 

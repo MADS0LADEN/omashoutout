@@ -1,14 +1,7 @@
 /research/
-
-/bin/
-/dist/
 /build/
 
-/packaging/arch/src/
-/packaging/arch/pkg/
-/packaging/arch/shoutout/
-/packaging/arch/*.pkg.tar.*
-
+# Direct makepkg invocations use these default paths.
 /src/
 /pkg/
 /shoutout/

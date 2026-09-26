@@ -8,9 +8,9 @@ Requires a KDE Plasma 6 desktop, a systemd user session, PipeWire's PulseAudio c
 
 ```sh
 make build kde
-./bin/shoutout doctor
-./bin/shoutout setup --device "Your speaker name"
-./bin/shoutout install
+./build/shoutout doctor
+./build/shoutout setup --device "Your speaker name"
+./build/shoutout install
 shoutout configure
 ```
 

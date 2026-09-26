@@ -1,6 +1,6 @@
 # Maintainer: Lars Karlslund
 pkgname=shoutout-git
-pkgver=0.1.0.r18.g47bd807
+pkgver=0.1.0.r21.g6cd0474
 pkgrel=1
 pkgdesc='Use your Google Audio compatible speakers for system audio, with native KDE settings'
 arch=('x86_64')
@@ -29,7 +29,7 @@ build() {
   cd "$srcdir/shoutout"
   CGO_ENABLED=1 GOTOOLCHAIN=local go build -trimpath -buildmode=pie -mod=readonly \
     -ldflags "-linkmode=external -extldflags '${LDFLAGS}' -X main.version=${pkgver}" \
-    -o bin/shoutout ./cmd/shoutout
+    -o build/shoutout ./cmd/shoutout
   cmake -S kde -B build/kde -G Ninja \
     -DCMAKE_BUILD_TYPE=None -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build build/kde
@@ -43,7 +43,7 @@ check() {
 
 package() {
   cd "$srcdir/shoutout"
-  install -Dm755 bin/shoutout "$pkgdir/usr/bin/shoutout"
+  install -Dm755 build/shoutout "$pkgdir/usr/bin/shoutout"
   DESTDIR="$pkgdir" cmake --install build/kde
   install -Dm644 packaging/shoutout.service "$pkgdir/usr/lib/systemd/user/shoutout.service"
   install -d "$pkgdir/usr/lib/systemd/user/default.target.wants"

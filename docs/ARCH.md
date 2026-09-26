@@ -6,7 +6,7 @@ Build and install the latest Git version system-wide:
 sudo pacman -S --needed base-devel git
 git clone https://github.com/lkarlslund/shoutout.git
 cd shoutout
-makepkg -si
+make package-install
 shoutout configure
 ```
 
@@ -31,7 +31,9 @@ copy in your home directory.
 
 ## Build only or remove
 
-`makepkg -s` builds the `.pkg.tar.zst` without installing it. `check()` runs Go
+`make package` builds the `.pkg.tar.zst` in `build/` without installing it.
+All package working files also stay under `build/`. The root `PKGBUILD`
+can still be used directly with `makepkg`. `check()` runs Go
 race tests and vet; these use simulated receivers and do not play speaker audio.
 This recipe tracks Git `main`; it has not been submitted to the AUR.
 
