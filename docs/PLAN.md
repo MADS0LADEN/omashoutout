@@ -32,7 +32,7 @@ The KCM page configures destination discovery/manual `address:port`, full-range 
 1. Measure audible delay for Cast Streaming at 400, 200 and 100 ms requested targets, including loss recovery and long-duration drift. Also measure audible delay on Lars Kontor with AAC live segments, including start/stop and drift over 30 minutes. Compare 250, 500 and 1000 ms segments. Distinguish receiver timeline estimates from acoustic measurement. The user observed about 30 seconds with continuous MP3.
 2. Validate reconnects, audio-server restart, suspend/resume, takeover and external volume changes on hardware. Retain bounded buffers and prevent stale audio replay.
 3. Validate advertised speaker groups. Multiple independent destinations and synchronized playback across them are not implemented.
-4. Produce native distro packages with the KCM in the standard plugin directory and declared runtime dependencies. Test a fresh installation and removal; the current per-user installer needs a new Plasma login for ordinary launcher discovery.
+4. The Arch PKGBUILD installs the KCM in the standard plugin directory with declared runtime dependencies. Validate installation and removal in a clean Arch environment, then extend packaging to other distributions.
 5. Tune the implemented real-time transport using receiver feedback and measured acoustic results. Do not label multi-second audio interactive or imply automatic video synchronization.
 
 Go remains appropriate for service and network control. Changing language does not itself remove receiver buffering. Keep the small native KDE integration separate; reconsider core language only if measured implementation constraints justify it.

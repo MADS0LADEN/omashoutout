@@ -77,3 +77,20 @@ New configurations default to Balanced. A configuration migration test verifies
 that old preset names become Custom without altering their playback parameters.
 The normal encoding selector contains Opus and AAC; a legacy MP3 configuration
 retains its entry when loaded. Go race tests and vet passed.
+
+
+## Arch Linux package
+
+`makepkg` successfully built `shoutout-git` on the development Arch host, using
+the public Git source. The package includes the binary under `/usr/bin`, the
+KDE module in the standard Qt plugin tree, a system-wide systemd user-unit,
+a desktop entry, documentation and MIT/third-party notices. Package checks ran
+Go race tests and vet. The packaged, stripped KDE module passed the native
+smoke check and the packaged executable reported its VCS version. The desktop
+entry passed `desktop-file-validate` and the package file list was inspected.
+
+This was not a clean-chroot build or a system-wide installation test. Installing
+through pacman requires interactive sudo authentication on this machine. The
+existing per-user deployment was retained. Display strings now use ShoutOut;
+package names, executable names and identifiers remain lowercase. An existing
+virtual sink retains its old description until recreated by a new audio session.
