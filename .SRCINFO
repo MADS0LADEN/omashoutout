@@ -1,6 +1,6 @@
 pkgbase = shoutout-git
 	pkgdesc = Use your Google Audio compatible speakers for system audio, with native KDE settings
-	pkgver = 0.1.0.r29.g6aa4b03
+	pkgver = 0.1.0.r31.g17c2faa
 	pkgrel = 1
 	url = https://github.com/lkarlslund/shoutout
 	install = shoutout.install
