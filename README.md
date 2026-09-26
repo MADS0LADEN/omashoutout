@@ -51,3 +51,7 @@ make test
 Configuration is stored in `$XDG_CONFIG_HOME/shoutout/config.json`, normally `~/.config/shoutout/config.json`. `setup` is intended before starting the service; use native settings or `shoutout config` / `shoutout apply` while running. Uninstall retains personal settings and removes the owned audio sink and installed files. Restart Plasma after uninstall to clear its inherited plugin search path.
 
 Tests use synthetic PCM and protocol simulations without emitting audio. Agent-run speaker tests must begin muted at 1%, verify receiver status, and never exceed 5%. See [validation](docs/VALIDATION.md) and the [plan](docs/PLAN.md).
+
+## License
+
+ShoutOut is licensed under the [MIT License](LICENSE). Third-party license notices are in [licenses/](licenses/README.md).
