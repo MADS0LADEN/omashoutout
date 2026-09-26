@@ -24,8 +24,12 @@ import (
 	"github.com/lkarlslund/shoutout/internal/config"
 )
 
+// Capture batching and the compatibility stream queue are implementation
+// limits. Playback buffering is controlled separately at the receiver.
+const captureLatencyMS = 40
+const mp3QueueMS = 200
+
 type Stream struct {
-	trimGain         atomic.Uint64
 	realtime         *cast.Transport
 	ContentType      string
 	directory        string
@@ -49,13 +53,12 @@ type Stream struct {
 func NewStream(parent context.Context, c config.Config, localIP, receiverIP string) (*Stream, error) {
 	ctx, cancel := context.WithCancel(parent)
 	started := false
-	s := &Stream{cancel: cancel, subscribers: make(map[chan []byte]struct{}), Done: make(chan error, 4), queue: max(2, c.Bitrate*125*c.BufferMS/1000/1024)}
+	s := &Stream{cancel: cancel, subscribers: make(map[chan []byte]struct{}), Done: make(chan error, 4), queue: max(2, c.Bitrate*125*mp3QueueMS/1000/1024)}
 	defer func() {
 		if !started && s.directory != "" {
 			os.RemoveAll(s.directory)
 		}
 	}()
-	s.SetTrimDB(c.TrimDB)
 	listener, err := net.Listen("tcp", net.JoinHostPort(localIP, strconv.Itoa(c.MediaPort)))
 	if err != nil {
 		cancel()
@@ -174,7 +177,7 @@ func NewStream(parent context.Context, c config.Config, localIP, receiverIP stri
 		})
 	}
 	s.server = &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second}
-	s.capture = exec.CommandContext(ctx, "parec", "--device="+SinkName+".monitor", "--format=float32le", "--rate=48000", "--channels=2", "--latency-msec="+strconv.Itoa(min(100, c.BufferMS)), "--property=application.name=Shoutout", "--property=node.dont-reconnect=true", "--property=node.virtual=true", "--property=media.role=filter")
+	s.capture = exec.CommandContext(ctx, "parec", "--device="+SinkName+".monitor", "--format=float32le", "--rate=48000", "--channels=2", "--latency-msec="+strconv.Itoa(captureLatencyMS), "--property=application.name=Shoutout", "--property=node.dont-reconnect=true", "--property=node.virtual=true", "--property=media.role=filter")
 	captured, err := s.capture.StdoutPipe()
 	if err != nil {
 		listener.Close()
@@ -263,7 +266,7 @@ func (s *Stream) publish(data []byte) {
 		}
 	}
 }
-func attenuate(b []byte, gain float64) float64 {
+func boundPCM(b []byte, gain float64) float64 {
 	peak := 0.0
 	for i := 0; i+4 <= len(b); i += 4 {
 		v := float64(math.Float32frombits(binary.LittleEndian.Uint32(b[i:])))
@@ -276,7 +279,6 @@ func attenuate(b []byte, gain float64) float64 {
 	}
 	return peak
 }
-func (s *Stream) SetTrimDB(db float64) { s.trimGain.Store(math.Float64bits(math.Pow(10, db/20))) }
 
 func (s *Stream) process(in io.Reader, out io.Writer) error {
 	buf := make([]byte, 3840)
@@ -289,11 +291,11 @@ func (s *Stream) process(in io.Reader, out io.Writer) error {
 		factor := 0.0
 		if s.Allowed.Load() {
 			ramp = math.Min(1, ramp+0.05)
-			factor = math.Float64frombits(s.trimGain.Load()) * ramp
+			factor = ramp
 		} else {
 			ramp = 0
 		}
-		peak := attenuate(buf[:n], factor)
+		peak := boundPCM(buf[:n], factor)
 		s.Peak.Store(math.Float64bits(peak))
 		if _, err = out.Write(buf[:n]); err != nil {
 			return err

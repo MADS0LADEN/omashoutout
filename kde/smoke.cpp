@@ -41,14 +41,22 @@ int main(int argc, char **argv) {
     if (!codec || codec->count() != 3 || !segment ||
         segment->minimum() != 250 || segment->maximum() != 2000 || !scale ||
         scale->maximum() != 100 || !devices || devices->count() < 2 ||
-        !status || status->text().isEmpty()) {
+        devices->width() < 300 || !status || status->text().isEmpty()) {
       fprintf(stderr, "Native controls or discovery failed\n");
+      app.exit(1);
+      return;
+    }
+    int previousWidth = devices->width();
+    w->resize(w->width() + 240, w->height());
+    app.processEvents();
+    if (devices->width() < previousWidth + 100) {
+      fprintf(stderr, "Destination field does not expand with the page\n");
       app.exit(1);
       return;
     }
     auto sliders = w->findChildren<QSlider *>();
     auto volumeSlider = w->findChild<QSlider *>("volumeScaleSlider");
-    if (sliders.size() != 5 || !volumeSlider) {
+    if (sliders.size() != 3 || !volumeSlider) {
       fprintf(stderr, "Missing native sliders\n");
       app.exit(1);
       return;

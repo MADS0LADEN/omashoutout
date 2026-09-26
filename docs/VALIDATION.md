@@ -23,8 +23,9 @@ Agent-run hardware tests started muted at 1%, then used 3%, below the absolute 5
 - Agent-run hardware setup started muted at 1%, then used 3% receiver volume. The user subsequently adjusted settings; later validation was read-only and preserved those choices. The service remains controlled by native KDE gain/mute.
 - Tests exercise AES-CTR against a known vector, packet fragmentation, frame-ID wraparound, RTCP bounds checking, stale feedback rejection, packet retransmission and sender clock mapping. A loopback synthetic test runs the actual encoder, decrypts received packets and sends simulated acknowledgements without contacting speakers.
 - Native settings include transport selection and a 40–1000 ms target-delay control. Existing AAC presets remain available; selecting a different transport is explicit.
-- Volume-only updates preserve the active session; trim updates reach running PCM capture. Protocol tests verify unmuted volume changes send only a level update and status query, without mute/stop/launch commands.
-- Native sliders cover receiver scale, attenuation, host buffer, segment duration and target delay, with synchronized numeric inputs.
+- Volume-only updates preserve the active session. Protocol tests verify unmuted volume changes send only a level update and status query, without mute/stop/launch commands.
+- Native sliders cover receiver scale, segment duration and target delay, with synchronized numeric inputs.
+- Attenuation and host-buffer fields have been removed from settings and configuration; legacy saved fields are ignored on load and disappear on save. Capture batching is managed internally.
 - Go race tests, vet and native UI smoke checks pass. Two five-second fuzz runs completed roughly 940,000 RTCP parser cases and 497,000 Ogg parser cases without failures.
 
 ## Outstanding

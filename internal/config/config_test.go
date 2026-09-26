@@ -1,7 +1,9 @@
 package config
 
 import (
+	"bytes"
 	"math"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -28,7 +30,7 @@ func TestPersistenceAndDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.ReceiverVolume != 0.01 || c.TrimDB != 0 {
+	if c.ReceiverVolume != 0.01 {
 		t.Fatalf("unsafe defaults: %+v", c)
 	}
 	c.Host = "192.0.2.1"
@@ -58,5 +60,30 @@ func TestRealtimeDelayBounds(t *testing.T) {
 		if (c.Validate() == nil) != valid {
 			t.Fatalf("delay %d validation", delay)
 		}
+	}
+}
+
+func TestRemovedSettingsMigration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	old := []byte(`{"version":1,"codec":"cast-opus","receiver_volume":0.03,"target_delay_ms":60,"trim_db":-20,"buffer_ms":1000}`)
+	if err := os.WriteFile(path, old, 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ReceiverVolume != .03 || c.TargetDelayMS != 60 || c.Codec != "cast-opus" {
+		t.Fatal("migration lost active settings")
+	}
+	if err := Save(path, c); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(saved, []byte("trim_db")) || bytes.Contains(saved, []byte("buffer_ms")) {
+		t.Fatal("obsolete settings retained")
 	}
 }

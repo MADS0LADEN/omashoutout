@@ -262,8 +262,6 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 	latest := s.Config()
 	if !streamConfig.RestartRequired(latest) {
 		c.ReceiverVolume = latest.ReceiverVolume
-		c.TrimDB = latest.TrimDB
-		stream.SetTrimDB(c.TrimDB)
 	}
 	if err = client.SetVolume(ctx, c.ReceiverVolume, native.Muted); err != nil {
 		return fmt.Errorf("verify playback volume: %w", err)
@@ -292,7 +290,6 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 					return fmt.Errorf("apply receiver volume: %w", err)
 				}
 			}
-			stream.SetTrimDB(next.TrimDB)
 			c = next
 		case next, ok := <-states:
 			if !ok {

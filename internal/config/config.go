@@ -22,16 +22,14 @@ type Config struct {
 	DeviceName     string  `json:"device_name"`
 	Host           string  `json:"host"`
 	Port           int     `json:"port"`
-	TrimDB         float64 `json:"trim_db"`
 	ReceiverVolume float64 `json:"receiver_volume"`
 	Preset         string  `json:"preset"`
 	Bitrate        int     `json:"bitrate_kbps"`
-	BufferMS       int     `json:"buffer_ms"`
 	MediaPort      int     `json:"media_port"`
 }
 
 func Default() Config {
-	return Config{TargetDelayMS: 400, Codec: "aac-hls", SegmentMS: 500, Enabled: true, Version: 1, Port: 8009, TrimDB: 0, ReceiverVolume: 0.01, Preset: "video", Bitrate: 192, BufferMS: 200, MediaPort: 17833}
+	return Config{TargetDelayMS: 400, Codec: "aac-hls", SegmentMS: 500, Enabled: true, Version: 1, Port: 8009, ReceiverVolume: 0.01, Preset: "video", Bitrate: 192, MediaPort: 17833}
 }
 
 func (c Config) Validate() error {
@@ -50,9 +48,6 @@ func (c Config) Validate() error {
 	if c.Port < 1 || c.Port > 65535 || c.MediaPort < 1 || c.MediaPort > 65535 {
 		return errors.New("port must be between 1 and 65535")
 	}
-	if math.IsNaN(c.TrimDB) || math.IsInf(c.TrimDB, 0) || c.TrimDB > 0 || c.TrimDB < -80 {
-		return errors.New("trim must be between -80 and 0 dB")
-	}
 	if math.IsNaN(c.ReceiverVolume) || math.IsInf(c.ReceiverVolume, 0) || c.ReceiverVolume < 0 || c.ReceiverVolume > MaxReceiverVolume {
 		return errors.New("receiver volume must be between 0 and 100%")
 	}
@@ -64,25 +59,22 @@ func (c Config) Validate() error {
 	if c.Bitrate != 128 && c.Bitrate != 192 && c.Bitrate != 256 && c.Bitrate != 320 {
 		return errors.New("encoding bitrate must be 128, 192, 256 or 320 kbps")
 	}
-	if c.BufferMS < 40 || c.BufferMS > 2000 {
-		return errors.New("buffer must be between 40 and 2000 ms")
-	}
 	return nil
 }
 
 // RestartRequired compares only settings consumed by the active transport.
-// Gain and descriptive preset metadata can change in an existing session.
+// Volume and descriptive preset metadata can change in an existing session.
 func (c Config) RestartRequired(next Config) bool {
 	if c.Enabled != next.Enabled || c.DeviceID != next.DeviceID || c.Host != next.Host || c.Port != next.Port || c.Codec != next.Codec || c.Bitrate != next.Bitrate {
 		return true
 	}
 	switch c.Codec {
 	case "cast-opus":
-		return c.TargetDelayMS != next.TargetDelayMS || c.BufferMS != next.BufferMS
+		return c.TargetDelayMS != next.TargetDelayMS
 	case "aac-hls":
-		return c.SegmentMS != next.SegmentMS || min(100, c.BufferMS) != min(100, next.BufferMS) || c.MediaPort != next.MediaPort
+		return c.SegmentMS != next.SegmentMS || c.MediaPort != next.MediaPort
 	default:
-		return c.BufferMS != next.BufferMS || c.MediaPort != next.MediaPort
+		return c.MediaPort != next.MediaPort
 	}
 }
 

@@ -73,7 +73,6 @@ func TestLiveUpdatesPreserveSession(t *testing.T) {
 	}{
 		{"unchanged", func(c *config.Config) {}},
 		{"volume", func(c *config.Config) { c.ReceiverVolume = .25 }},
-		{"attenuation", func(c *config.Config) { c.TrimDB = -20 }},
 		{"preset_label", func(c *config.Config) { c.Preset = "custom" }},
 		{"inactive_target_delay", func(c *config.Config) { c.TargetDelayMS = 100 }},
 	} {

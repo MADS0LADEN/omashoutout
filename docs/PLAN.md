@@ -8,7 +8,7 @@ The Go service owns discovery, Cast session control, persistence and supervision
 flowchart LR
     Applications --> Sink[Shoutout output: native gain and mute]
     Sink --> Capture[Virtual monitor capture]
-    Capture --> PCM[Float PCM trim and peak bound]
+    Capture --> PCM[Float PCM mute, fade-in and peak bound]
     PCM --> Encoder[FFmpeg Opus, AAC or MP3]
     Encoder --> Transport[Encrypted UDP or receiver-restricted HTTP]
     Transport --> Receiver[Google audio device]
@@ -17,13 +17,13 @@ flowchart LR
     Service --> Receiver
 ```
 
-A stable owned null sink survives service restarts to preserve routing and native gain/mute. Capture is pinned to its monitor and marked virtual. Native mute is mirrored to the receiver; volume is applied once by the audio server, with independent user-selected receiver scaling and optional PCM trim. New connections verify muted receiver volume before enabling non-silent PCM.
+A stable owned null sink survives service restarts to preserve routing and native gain/mute. Capture is pinned to its monitor and marked virtual. Native mute is mirrored to the receiver; volume is applied once by the audio server, with independent user-selected receiver scaling. New connections verify muted receiver volume before enabling non-silent PCM.
 
 Cast Streaming negotiates the built-in audio-only receiver, stereo 48 kHz Opus, a UDP endpoint and an explicit playback-delay target. Frames are encrypted independently with session keys, packetized, paced, acknowledged and retained only inside a bounded retransmission window. A stalled acknowledgement stream or a late encoder triggers reconnection rather than an increasing backlog. Requested/reported buffer durations are shown separately from audible latency.
 
-AAC live delivery uses a sliding six-segment playlist, bounded retained files, tokenized URLs and prompt segment publication. Continuous MP3 remains selectable. Host buffers and live segment duration are adjustable; opaque receiver buffers remain outside direct sender control.
+AAC live delivery uses a sliding six-segment playlist, bounded retained files, tokenized URLs and prompt segment publication. Continuous MP3 remains selectable. Capture batching is fixed internally at 40 ms; the MP3 queue is bounded internally. Live segment duration remains adjustable.
 
-The KCM page configures destination discovery/manual address, full-range receiver volume scale, attenuation, encoding, bitrate, host buffering, segment duration, presets and enablement. It shows connection status and native mute/volume. Volume scale and PCM attenuation apply live; no-op and inactive transport settings do not reconnect. Active transport changes restart the session. Numeric inputs and sliders stay synchronized. Settings travel through a mode-0600 Unix socket. There is no web settings UI.
+The KCM page configures destination discovery/manual address, full-range receiver volume scale, encoding, bitrate, segment duration, presets and enablement. It shows connection status and native mute/volume. Volume scale applies live; no-op and inactive transport settings do not reconnect. Active transport changes restart the session. Numeric inputs and sliders stay synchronized. Settings travel through a mode-0600 Unix socket. There is no web settings UI.
 
 ## Remaining milestones
 

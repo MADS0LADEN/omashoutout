@@ -35,8 +35,16 @@ public:
     description->setWordWrap(true);
     layout->addWidget(description);
     auto form = new QFormLayout;
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    enabled = new QCheckBox(tr("Enable device"), widget());
+    enabled->setObjectName("enabled");
+    form->addRow(tr("General:"), enabled);
     devices = new QComboBox(widget());
     devices->setObjectName("destination");
+    devices->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    devices->setSizeAdjustPolicy(
+        QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    devices->setMinimumContentsLength(30);
     form->addRow(tr("Destination:"), devices);
     auto scan = new QPushButton(tr("Find audio devices"), widget());
     scan->setObjectName("discover");
@@ -56,11 +64,6 @@ public:
     scale->setObjectName("volumeScale");
     form->addRow(tr("Receiver volume at full desktop volume:"),
                  sliderRow(scale));
-    trim = new QDoubleSpinBox(widget());
-    trim->setRange(-80, 0);
-    trim->setSuffix(tr(" dB"));
-    trim->setObjectName("trimDB");
-    form->addRow(tr("Additional attenuation:"), sliderRow(trim));
     preset = new QComboBox(widget());
     preset->setObjectName("preset");
     for (const auto &p : {"Interactive", "Video", "Music", "Custom"})
@@ -92,21 +95,12 @@ public:
     for (int rate : {128, 192, 256, 320})
       bitrate->addItem(QString::number(rate) + tr(" kbps"), rate);
     form->addRow(tr("Encoding bitrate:"), bitrate);
-    buffer = new QSpinBox(widget());
-    buffer->setObjectName("bufferMS");
-    buffer->setRange(40, 2000);
-    buffer->setSingleStep(20);
-    buffer->setSuffix(tr(" ms"));
-    form->addRow(tr("Host buffer target:"), sliderRow(buffer));
-    enabled = new QCheckBox(tr("Enable this output"), widget());
-    enabled->setObjectName("enabled");
-    form->addRow(QString(), enabled);
     layout->addLayout(form);
     auto note =
         new QLabel(tr("The volume scale is configurable from 0–100%. Lower it "
                       "for sensitive speakers. Presets do not guarantee low "
                       "latency; receiver buffering is additional. Volume scale "
-                      "and attenuation apply without reconnecting. Encoding or "
+                      "applies without reconnecting. Encoding or "
                       "target-delay changes restart playback."),
                    widget());
     note->setWordWrap(true);
@@ -136,10 +130,9 @@ public:
       config["device_name"] = host->text();
       markAsChanged();
     });
-    for (auto spin : {scale, trim})
-      connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
-              [this] { markAsChanged(); });
-    for (auto spin : {port, buffer, segment, delay})
+    connect(scale, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
+            [this] { markAsChanged(); });
+    for (auto spin : {port, segment, delay})
       connect(spin, qOverload<int>(&QSpinBox::valueChanged), this,
               [this] { markAsChanged(); });
     connect(enabled, &QCheckBox::toggled, this, [this] { markAsChanged(); });
@@ -161,10 +154,6 @@ public:
       preset->setCurrentIndex(3);
       markAsChanged();
     });
-    connect(buffer, qOverload<int>(&QSpinBox::valueChanged), this, [this] {
-      if (!loading)
-        preset->setCurrentIndex(3);
-    });
     connect(preset, &QComboBox::activated, this, [this](int i) {
       loading = true;
       if (i < 3) {
@@ -174,17 +163,14 @@ public:
       }
       if (i == 0) {
         bitrate->setCurrentIndex(0);
-        buffer->setValue(80);
         segment->setValue(250);
       }
       if (i == 1) {
         bitrate->setCurrentIndex(1);
-        buffer->setValue(200);
         segment->setValue(500);
       }
       if (i == 2) {
         bitrate->setCurrentIndex(3);
-        buffer->setValue(1000);
         segment->setValue(1000);
       }
       loading = false;
@@ -215,28 +201,24 @@ public:
     config["host"] = host->text().trimmed();
     config["port"] = port->value();
     config["receiver_volume"] = scale->value() / 100.0;
-    config["trim_db"] = trim->value();
     config["preset"] = preset->currentData().toString();
     config["bitrate_kbps"] = bitrate->currentData().toInt();
-    config["buffer_ms"] = buffer->value();
     config["enabled"] = enabled->isChecked();
     run({"apply"}, QJsonDocument(config).toJson(QJsonDocument::Compact),
         [this](QByteArray) {
           setNeedsSave(false);
-          error->setText(tr("Settings applied. Volume scale and attenuation "
-                            "update without reconnecting."));
+          error->setText(tr("Settings applied. Volume scale "
+                            "updates without reconnecting."));
         });
   }
   void defaults() override {
     scale->setValue(1);
-    trim->setValue(0);
     loading = true;
     codec->setCurrentIndex(0);
     segment->parentWidget()->setEnabled(true);
     delay->parentWidget()->setEnabled(false);
     preset->setCurrentIndex(1);
     bitrate->setCurrentIndex(1);
-    buffer->setValue(200);
     segment->setValue(500);
     delay->setValue(400);
     loading = false;
@@ -284,8 +266,8 @@ private:
   QJsonObject config;
   QComboBox *devices, *preset, *bitrate, *codec;
   QLineEdit *host;
-  QSpinBox *port, *buffer, *segment, *delay;
-  QDoubleSpinBox *scale, *trim;
+  QSpinBox *port, *segment, *delay;
+  QDoubleSpinBox *scale;
   QCheckBox *enabled;
   QLabel *status, *error;
   QTimer *timer;
@@ -336,10 +318,8 @@ private:
     host->setText(config["host"].toString());
     port->setValue(config["port"].toInt(8009));
     scale->setValue(config["receiver_volume"].toDouble() * 100);
-    trim->setValue(config["trim_db"].toDouble());
     preset->setCurrentIndex(preset->findData(config["preset"].toString()));
     bitrate->setCurrentIndex(bitrate->findData(config["bitrate_kbps"].toInt()));
-    buffer->setValue(config["buffer_ms"].toInt());
     enabled->setChecked(config["enabled"].toBool());
     devices->clear();
     devices->addItem(config["device_name"].toString(), QJsonObject{});
