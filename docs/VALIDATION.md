@@ -22,7 +22,7 @@ Agent-run hardware tests started muted at 1%, then used 3%, below the absolute 5
 - The user confirms audible playback and a noticeable reduction in delay compared with HTTP audio.
 - Agent-run hardware setup started muted at 1%, then used 3% receiver volume. The user subsequently adjusted settings; later validation was read-only and preserved those choices. The service remains controlled by native KDE gain/mute.
 - Tests exercise AES-CTR against a known vector, packet fragmentation, frame-ID wraparound, RTCP bounds checking, stale feedback rejection, packet retransmission and sender clock mapping. A loopback synthetic test runs the actual encoder, decrypts received packets and sends simulated acknowledgements without contacting speakers.
-- Native settings include transport selection and a 20–1000 ms target-delay control. Existing AAC presets remain available; selecting a different transport is explicit.
+- Native settings include transport selection and a 10–1000 ms target-delay control. Existing AAC presets remain available; selecting a different transport is explicit.
 - Volume-only updates preserve the active session. Protocol tests verify unmuted volume changes send only a level update and status query, without mute/stop/launch commands.
 - Native sliders cover receiver scale, segment duration and target delay, with synchronized numeric inputs.
 - Attenuation and host-buffer fields have been removed from settings and configuration; legacy saved fields are ignored on load and disappear on save. Capture batching is managed internally.
@@ -124,7 +124,7 @@ Frame duration now follows the receiver target: 5 ms below 40 ms, 10 ms
 below 80 ms, and 20 ms otherwise. Capture requests and WAV input packets are
 5 ms; the PCM gate also processes 5 ms batches while preserving fade duration.
 RTP timestamps, pacing and the acknowledgement window use the selected frame
-duration. KDE permits custom targets from 20 ms, in 10 ms steps. Preset targets
+duration. KDE permits custom targets from 10 ms, in 10 ms steps. Preset targets
 remain unchanged.
 
 Silent receiver tests accepted 5 and 10 ms frames. A 20-second synthetic capture

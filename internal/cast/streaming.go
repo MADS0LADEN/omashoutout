@@ -67,8 +67,8 @@ func (c *Client) NegotiateAudio(ctx context.Context, app Application, bitrate, d
 	return s, nil
 }
 
-// FrameDurationMS keeps frame collection within one quarter of the requested
-// playback budget, using supported whole-millisecond Opus frame durations.
+// FrameDurationMS selects short frames for tighter playback budgets, with a
+// minimum of 5 ms. Receiver acceptance does not guarantee meeting the target.
 func (s StreamingSession) FrameDurationMS() int {
 	if s.DelayMS < 40 {
 		return 5
