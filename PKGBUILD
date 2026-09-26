@@ -51,5 +51,5 @@ package() {
   install -Dm644 packaging/shoutout.desktop "$pkgdir/usr/share/applications/shoutout.desktop"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 licenses/*.txt -t "$pkgdir/usr/share/licenses/$pkgname/"
-  install -Dm644 docs/*.md -t "$pkgdir/usr/share/doc/shoutout/"
+  install -Dm644 docs/*.md docs/*.png -t "$pkgdir/usr/share/doc/shoutout/"
 }
