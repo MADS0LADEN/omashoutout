@@ -1,29 +1,27 @@
 # Omashoutout
 
-**Use your Google Audio compatible speakers for system audio**
+**Use a Cast speaker as the system audio output on Omarchy**
 
-Omashoutout turns a Google Cast speaker into a Linux audio output. On **Omarchy** or **KDE Plasma**, select the Omashoutout output in your desktop audio controls and send sound from your games, browser, music player—or your whole desktop.
+Omashoutout adds an **Omashoutout** PipeWire output. Select it in the Omarchy **Audio** panel and play games, the browser, a music player, or the whole desktop through a Cast receiver.
 
-![Omashoutout settings in KDE](omashoutout.png)
+Settings are the Omashoutout bar plugin (speaker icon, or `omashoutout configure`). Volume and mute stay on that output in the Audio panel. The plugin does not duplicate those controls.
 
-- **Feels native.** Omarchy: a shell bar widget plugin. KDE: a System Settings page. Volume and mute are the Omashoutout output in the desktop audio controls (Omarchy Audio panel or KDE).
-- **Speakers appear automatically.** Live discovery keeps your destination list up to date.
-- **Choose your balance.** Low latency, Balanced and High quality presets, plus custom controls.
-- **Tame sensitive speakers.** Adjustable volume scaling, applied without interrupting playback.
+- **Bar plugin.** Destination, receiver volume scale, playback preset, and encoding.
+- **Speakers appear automatically.** Live discovery keeps the destination list up to date. You can also type `host:port`.
+- **Presets.** Low latency, Balanced, High quality, or Custom.
+- **Receiver volume scale.** 0–100% of the receiver at full desktop volume, applied without reconnecting.
 
 | Preset | Playback |
 |---|---|
 | Low latency | Opus · 128 kbps · 20 ms receiver target |
 | Balanced | Opus · 192 kbps · 100 ms receiver target |
-| High quality | AAC · 320 kbps |
+| High quality | AAC · 320 kbps · 500 ms live segments |
 
-Receiver targets are buffer settings, not total audible latency. Playback is tested on Chromecast Audio; Cast Streaming is experimental.
+Receiver targets and segment lengths are protocol settings, not measured end-to-end latency. Cast Streaming (Opus) is experimental. AAC live segments are the other encoding. An existing MP3 configuration stays available as a legacy option.
 
 ## Get started
 
-Omashoutout needs **PipeWire** with PulseAudio compatibility on either desktop. Settings and install steps differ; see [requirements and installation details](GUIDE.md).
-
-**Omarchy** — build and install for your user:
+Omashoutout needs **PipeWire** with PulseAudio compatibility, `pactl`, `parec`, FFmpeg, a systemd user session, and the Omarchy shell. Details are in [installation and usage](GUIDE.md).
 
 ```sh
 make build
@@ -31,26 +29,13 @@ make build
 omashoutout configure
 ```
 
-This installs the daemon, user systemd service, and the Omarchy shell bar plugin (`io.github.MADS0LADEN.omashoutout`). `omashoutout configure` opens that panel when `omarchy-shell` is on PATH.
+`omashoutout install` copies the binary to `~/.local/bin/omashoutout`, installs the user systemd service, and enables the bar plugin `io.github.MADS0LADEN.omashoutout` on the right side of the shell bar.
 
-**KDE Plasma 6** — on Arch Linux, use the [system-wide package](ARCH.md) (KDE module only; it does not install the Omarchy plugin):
+In the panel, enable the device, choose a speaker (or enter an address such as `192.168.1.10:8009`), set the receiver volume scale, and apply. Then select **Omashoutout** in the Audio panel and unmute it. Start with a low volume scale on a sensitive speaker.
 
-```sh
-make package-install
-omashoutout configure
-```
+A new output starts muted, with a default receiver scale of 1%. Balanced is the preset for a new install.
 
-Or build from source with Go, FFmpeg and the Qt6/KDE development libraries:
-
-```sh
-make build kde
-./build/omashoutout install
-omashoutout configure
-```
-
-Choose your speaker, select **Omashoutout** as your audio output, and unmute (Omarchy Audio panel or KDE). Start with a low volume scale for sensitive speakers.
-
-`omashoutout configure` opens settings immediately when supported (`omarchy-shell … open` on Omarchy, otherwise the KDE System Settings module). Per-user KDE source installs need a new login for discovery through the normal System Settings launcher. Arch packages are discoverable immediately.
+The same daemon can open a KDE Plasma 6 System Settings page. That path is documented in [Arch packaging](ARCH.md) and [installation and usage](GUIDE.md). Hardware notes in the docs were recorded on KDE; the Omarchy panel has not been hardware-tested.
 
 [Usage & troubleshooting](GUIDE.md) · [Development plan](PLAN.md) · [Validation](VALIDATION.md)
 
