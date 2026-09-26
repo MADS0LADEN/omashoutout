@@ -1,4 +1,4 @@
-module github.com/lkarlslund/shoutout
+module github.com/MADS0LADEN/omashoutout
 
 go 1.26.0
 

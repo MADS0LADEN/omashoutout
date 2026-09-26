@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lkarlslund/shoutout/internal/config"
+	"github.com/MADS0LADEN/omashoutout/internal/config"
 )
 
 const (
@@ -22,7 +22,7 @@ const (
 	streamingNS  = "urn:x-cast:com.google.cast.webrtc"
 	mediaNS      = "urn:x-cast:com.google.cast.media"
 	receiver     = "receiver-0"
-	sender       = "shoutout-0"
+	sender       = "omashoutout-0"
 	appID        = "CC1AD845"
 )
 
@@ -317,7 +317,7 @@ func (c *Client) Launch(ctx context.Context, realtime bool) (Application, error)
 	return Application{}, errors.New("receiver did not launch audio application")
 }
 func (c *Client) Load(ctx context.Context, app Application, url, contentType string) error {
-	_, err := c.request(ctx, app.TransportID, mediaNS, map[string]any{"type": "LOAD", "autoplay": true, "currentTime": 0, "media": map[string]any{"contentId": url, "contentType": contentType, "streamType": "LIVE", "metadata": map[string]any{"metadataType": 3, "title": "ShoutOut", "artist": "Desktop audio"}}})
+	_, err := c.request(ctx, app.TransportID, mediaNS, map[string]any{"type": "LOAD", "autoplay": true, "currentTime": 0, "media": map[string]any{"contentId": url, "contentType": contentType, "streamType": "LIVE", "metadata": map[string]any{"metadataType": 3, "title": "Omashoutout", "artist": "Desktop audio"}}})
 	return err
 }
 func (c *Client) Media(ctx context.Context, app Application) (MediaStatus, error) {

@@ -9,10 +9,10 @@ import "Model.js" as Model
 
 Panel {
   id: root
-  moduleName: "io.github.lkarlslund.shoutout"
-  ipcTarget: "io.github.lkarlslund.shoutout"
+  moduleName: "io.github.MADS0LADEN.omashoutout"
+  ipcTarget: "io.github.MADS0LADEN.omashoutout"
 
-  readonly property string localBinary: Quickshell.env("HOME") + "/.local/bin/shoutout"
+  readonly property string localBinary: Quickshell.env("HOME") + "/.local/bin/omashoutout"
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
@@ -54,8 +54,8 @@ Panel {
     markDirty()
   }
 
-  function shoutoutCommand(subcommand) {
-    return usePathBinary ? ["shoutout", subcommand] : [localBinary, subcommand]
+  function omashoutoutCommand(subcommand) {
+    return usePathBinary ? ["omashoutout", subcommand] : [localBinary, subcommand]
   }
 
   function commandFailedToStart(exitCode, exitStatus, stdoutReceived) {
@@ -134,7 +134,7 @@ Panel {
     try {
       payload = JSON.parse(raw)
     } catch (e) {
-      errorText = Model.display("Invalid response from shoutout status.")
+      errorText = Model.display("Invalid response from omashoutout status.")
       return
     }
 
@@ -158,7 +158,7 @@ Panel {
     try {
       config = JSON.parse(raw)
     } catch (e) {
-      errorText = Model.display("Invalid response from shoutout config.")
+      errorText = Model.display("Invalid response from omashoutout config.")
       return
     }
     if (!dirty) applyConfigToForm(config)
@@ -174,7 +174,7 @@ Panel {
     try {
       config = JSON.parse(raw)
     } catch (e) {
-      errorText = Model.display("Invalid response from shoutout apply.")
+      errorText = Model.display("Invalid response from omashoutout apply.")
       return
     }
     applyConfigToForm(config)
@@ -191,7 +191,7 @@ Panel {
         Qt.callLater(retryCli)
         return
       }
-      errorText = Model.display("ShoutOut CLI not found. Install the shoutout binary first.")
+      errorText = Model.display("Omashoutout CLI not found. Install the omashoutout binary first.")
       statusText = Model.display(Model.offlineStatusMessage())
       initialLoadPending = false
       return
@@ -206,7 +206,7 @@ Panel {
 
     if (exitCode !== 0 && raw === "") {
       var err = String(cliStderr.text || "").trim()
-      errorText = Model.display(err !== "" ? err : "Could not reach ShoutOut.")
+      errorText = Model.display(err !== "" ? err : "Could not reach Omashoutout.")
       statusText = Model.display(Model.offlineStatusMessage())
       initialLoadPending = false
       return
@@ -231,7 +231,7 @@ Panel {
     cliKind = kind
     pendingApplyBody = applyBody || null
     cliStdout.gotData = false
-    cliProc.command = shoutoutCommand(kind)
+    cliProc.command = omashoutoutCommand(kind)
     cliProc.running = true
   }
 
@@ -306,7 +306,7 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     text: ""
-    tooltipText: "ShoutOut"
+    tooltipText: "Omashoutout"
     onPressed: root.toggle()
   }
 
@@ -346,7 +346,7 @@ Panel {
 
           Text {
             textFormat: Text.PlainText
-            text: "ShoutOut"
+            text: "Omashoutout"
             color: root.foreground
             font.family: root.fontFamily
             font.pixelSize: Style.font.title
@@ -356,7 +356,7 @@ Panel {
 
           Text {
             textFormat: Text.PlainText
-            text: "Volume and mute are the ShoutOut output in the Audio panel."
+            text: "Volume and mute are the Omashoutout output in the Audio panel."
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall

@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lkarlslund/shoutout/internal/config"
-	"github.com/lkarlslund/shoutout/internal/discovery"
-	"github.com/lkarlslund/shoutout/internal/service"
+	"github.com/MADS0LADEN/omashoutout/internal/config"
+	"github.com/MADS0LADEN/omashoutout/internal/discovery"
+	"github.com/MADS0LADEN/omashoutout/internal/service"
 )
 
 type Request struct {
@@ -33,7 +33,7 @@ func Path() (string, error) {
 	if d == "" {
 		return "", errors.New("XDG_RUNTIME_DIR is required")
 	}
-	return filepath.Join(d, "shoutout.sock"), nil
+	return filepath.Join(d, "omashoutout.sock"), nil
 }
 func Listen() (net.Listener, error) {
 	p, err := Path()

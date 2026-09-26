@@ -17,21 +17,21 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lkarlslund/shoutout/internal/audio"
-	"github.com/lkarlslund/shoutout/internal/config"
-	"github.com/lkarlslund/shoutout/internal/control"
-	"github.com/lkarlslund/shoutout/internal/discovery"
-	"github.com/lkarlslund/shoutout/internal/service"
-	"github.com/lkarlslund/shoutout/omarchy"
+	"github.com/MADS0LADEN/omashoutout/internal/audio"
+	"github.com/MADS0LADEN/omashoutout/internal/config"
+	"github.com/MADS0LADEN/omashoutout/internal/control"
+	"github.com/MADS0LADEN/omashoutout/internal/discovery"
+	"github.com/MADS0LADEN/omashoutout/internal/service"
+	"github.com/MADS0LADEN/omashoutout/omarchy"
 )
 
-const omarchyPluginID = "io.github.lkarlslund.shoutout"
+const omarchyPluginID = "io.github.MADS0LADEN.omashoutout"
 
 var version = "dev"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		slog.Error("shoutout", "error", err)
+		slog.Error("omashoutout", "error", err)
 		os.Exit(1)
 	}
 }
@@ -45,7 +45,7 @@ func run(args []string) error {
 	}
 	switch args[0] {
 	case "help", "--help", "-h":
-		fmt.Println("ShoutOut " + version + ` — virtual audio output for Google Cast
+		fmt.Println("Omashoutout " + version + ` — virtual audio output for Google Cast
 
 Commands:
   devices                 Discover receivers on the local network
@@ -54,7 +54,7 @@ Commands:
   run                     Run the audio output and local settings service
   install                 Install and start a systemd user service
   uninstall               Remove installed service, binary and desktop entry
-  configure               Open ShoutOut settings
+  configure               Open Omashoutout settings
   status                  Print the running service status
   config                  Print the current configuration
   apply                   Apply JSON configuration read from stdin
@@ -115,7 +115,7 @@ Use the desktop audio controls for volume and mute. On Omarchy that is the Audio
 		if err = config.Save(path, c); err != nil {
 			return err
 		}
-		fmt.Println("Saved destination:", c.DeviceName, "— run shoutout install or shoutout run.")
+		fmt.Println("Saved destination:", c.DeviceName, "— run omashoutout install or omashoutout run.")
 		return nil
 	case "run":
 		return daemon(path)
@@ -129,8 +129,8 @@ Use the desktop audio controls for volume and mute. On Omarchy that is the Audio
 		if err != nil {
 			return err
 		}
-		plugin := filepath.Join(home, ".local", "lib", "qt6", "plugins", "plasma", "kcms", "systemsettings_qwidgets", "kcm_shoutout.so")
-		cmd := exec.Command("systemsettings", "kcm_shoutout")
+		plugin := filepath.Join(home, ".local", "lib", "qt6", "plugins", "plasma", "kcms", "systemsettings_qwidgets", "kcm_omashoutout.so")
+		cmd := exec.Command("systemsettings", "kcm_omashoutout")
 		// Packaged plugins use Qt's system search path. Extend it only for
 		// installations in the user's home directory.
 		if _, err = os.Stat(plugin); err == nil {
@@ -163,7 +163,7 @@ Use the desktop audio controls for volume and mute. On Omarchy that is the Audio
 	case "uninstall":
 		return install(true)
 	default:
-		return fmt.Errorf("unknown command %q; use shoutout help", args[0])
+		return fmt.Errorf("unknown command %q; use omashoutout help", args[0])
 	}
 }
 func daemon(path string) error {
@@ -175,13 +175,13 @@ func daemon(path string) error {
 	if runtime == "" {
 		return errors.New("XDG_RUNTIME_DIR is required; run inside a user desktop session")
 	}
-	lock, err := os.OpenFile(filepath.Join(runtime, "shoutout.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	lock, err := os.OpenFile(filepath.Join(runtime, "omashoutout.lock"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return err
 	}
 	defer lock.Close()
 	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		return errors.New("ShoutOut is already running")
+		return errors.New("Omashoutout is already running")
 	}
 	listener, err := control.Listen()
 	if err != nil {
@@ -253,10 +253,10 @@ func install(remove bool) error {
 	if data == "" {
 		data = filepath.Join(home, ".local", "share")
 	}
-	binaryPath := filepath.Join(home, ".local", "bin", "shoutout")
-	unitPath := filepath.Join(conf, "systemd", "user", "shoutout.service")
-	desktopPath := filepath.Join(data, "applications", "shoutout.desktop")
-	environmentPath := filepath.Join(conf, "plasma-workspace", "env", "shoutout.sh")
+	binaryPath := filepath.Join(home, ".local", "bin", "omashoutout")
+	unitPath := filepath.Join(conf, "systemd", "user", "omashoutout.service")
+	desktopPath := filepath.Join(data, "applications", "omashoutout.desktop")
+	environmentPath := filepath.Join(conf, "plasma-workspace", "env", "omashoutout.sh")
 	if remove {
 		if omarchyCLIAvailable() {
 			pluginDir := filepath.Join(conf, "omarchy", "plugins", omarchyPluginID)
@@ -268,7 +268,7 @@ func install(remove bool) error {
 				_ = cmd.Run()
 			}
 		}
-		cmd := exec.Command("systemctl", "--user", "disable", "--now", "shoutout.service")
+		cmd := exec.Command("systemctl", "--user", "disable", "--now", "omashoutout.service")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err = cmd.Run(); err != nil {
@@ -277,7 +277,7 @@ func install(remove bool) error {
 		if err = audio.RemoveSink(context.Background()); err != nil {
 			return err
 		}
-		for _, p := range []string{unitPath, desktopPath, binaryPath, environmentPath, filepath.Join(home, ".local", "lib", "qt6", "plugins", "plasma", "kcms", "systemsettings_qwidgets", "kcm_shoutout.so")} {
+		for _, p := range []string{unitPath, desktopPath, binaryPath, environmentPath, filepath.Join(home, ".local", "lib", "qt6", "plugins", "plasma", "kcms", "systemsettings_qwidgets", "kcm_omashoutout.so")} {
 			if err = os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return err
 			}
@@ -304,7 +304,7 @@ func install(remove bool) error {
 			return err
 		}
 	}
-	temp, err := os.CreateTemp(filepath.Dir(binaryPath), ".shoutout-*")
+	temp, err := os.CreateTemp(filepath.Dir(binaryPath), ".omashoutout-*")
 	if err != nil {
 		return err
 	}
@@ -324,9 +324,9 @@ func install(remove bool) error {
 		return err
 	}
 	// Install the native module beside the per-user Qt plugin tree when supplied.
-	moduleSource := filepath.Join(filepath.Dir(self), "kcm_shoutout.so")
+	moduleSource := filepath.Join(filepath.Dir(self), "kcm_omashoutout.so")
 	if moduleData, readErr := os.ReadFile(moduleSource); readErr == nil {
-		moduleDest := filepath.Join(home, ".local", "lib", "qt6", "plugins", "plasma", "kcms", "systemsettings_qwidgets", "kcm_shoutout.so")
+		moduleDest := filepath.Join(home, ".local", "lib", "qt6", "plugins", "plasma", "kcms", "systemsettings_qwidgets", "kcm_omashoutout.so")
 		if err = os.MkdirAll(filepath.Dir(moduleDest), 0755); err != nil {
 			return err
 		}
@@ -345,15 +345,15 @@ func install(remove bool) error {
 	}
 	// systemd interprets percent specifiers even in quoted command arguments.
 	escaped := strconv.Quote(strings.ReplaceAll(binaryPath, "%", "%%"))
-	unit := "[Unit]\nDescription=ShoutOut virtual audio output\nAfter=pipewire-pulse.service\nStartLimitIntervalSec=60\nStartLimitBurst=5\n\n[Service]\nExecStart=" + escaped + " run\nRestart=on-failure\nRestartSec=3\nTimeoutStopSec=10\nNoNewPrivileges=yes\n\n[Install]\nWantedBy=default.target\n"
+	unit := "[Unit]\nDescription=Omashoutout virtual audio output\nAfter=pipewire-pulse.service\nStartLimitIntervalSec=60\nStartLimitBurst=5\n\n[Service]\nExecStart=" + escaped + " run\nRestart=on-failure\nRestartSec=3\nTimeoutStopSec=10\nNoNewPrivileges=yes\n\n[Install]\nWantedBy=default.target\n"
 	if err = os.WriteFile(unitPath, []byte(unit), 0644); err != nil {
 		return err
 	}
-	desktop := "[Desktop Entry]\nType=Application\nName=ShoutOut\nComment=Configure your virtual audio output\nExec=" + escaped + " configure\nIcon=audio-speakers\nTerminal=false\nCategories=AudioVideo;Audio;\n"
+	desktop := "[Desktop Entry]\nType=Application\nName=Omashoutout\nComment=Configure your virtual audio output\nExec=" + escaped + " configure\nIcon=audio-speakers\nTerminal=false\nCategories=AudioVideo;Audio;\n"
 	if err = os.WriteFile(desktopPath, []byte(desktop), 0644); err != nil {
 		return err
 	}
-	for _, args := range [][]string{{"--user", "daemon-reload"}, {"--user", "enable", "shoutout.service"}, {"--user", "restart", "shoutout.service"}} {
+	for _, args := range [][]string{{"--user", "daemon-reload"}, {"--user", "enable", "omashoutout.service"}, {"--user", "restart", "omashoutout.service"}} {
 		cmd := exec.Command("systemctl", args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -366,7 +366,7 @@ func install(remove bool) error {
 			return err
 		}
 	}
-	fmt.Println("Installed and started. Use the desktop audio controls for volume and mute, and ShoutOut settings for destination and presets.")
+	fmt.Println("Installed and started. Use the desktop audio controls for volume and mute, and Omashoutout settings for destination and presets.")
 	return nil
 }
 
@@ -466,7 +466,7 @@ func pluginSearchPath(home string) string {
 }
 
 func replaceFile(path string, data []byte, mode os.FileMode) error {
-	f, err := os.CreateTemp(filepath.Dir(path), ".shoutout-*")
+	f, err := os.CreateTemp(filepath.Dir(path), ".omashoutout-*")
 	if err != nil {
 		return err
 	}

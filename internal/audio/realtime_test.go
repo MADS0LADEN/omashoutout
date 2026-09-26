@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lkarlslund/shoutout/internal/cast"
-	"github.com/lkarlslund/shoutout/internal/config"
+	"github.com/MADS0LADEN/omashoutout/internal/cast"
+	"github.com/MADS0LADEN/omashoutout/internal/config"
 )
 
 func TestRealtimeSyntheticAudio(t *testing.T) {

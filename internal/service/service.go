@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lkarlslund/shoutout/internal/audio"
-	"github.com/lkarlslund/shoutout/internal/cast"
-	"github.com/lkarlslund/shoutout/internal/config"
-	"github.com/lkarlslund/shoutout/internal/discovery"
+	"github.com/MADS0LADEN/omashoutout/internal/audio"
+	"github.com/MADS0LADEN/omashoutout/internal/cast"
+	"github.com/MADS0LADEN/omashoutout/internal/config"
+	"github.com/MADS0LADEN/omashoutout/internal/discovery"
 )
 
 var errTakenOver = errors.New("another controller took over; save settings to reconnect")
@@ -284,7 +284,7 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 	stream.Allowed.Store(!native.Muted)
 	mark("playback volume verification")
 
-	s.state("streaming", "Connected. Select ShoutOut as the audio output.")
+	s.state("streaming", "Connected. Select Omashoutout as the audio output.")
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -371,7 +371,7 @@ func (s *Service) session(ctx context.Context, c config.Config) error {
 				return errTakenOver
 			}
 			s.mu.Lock()
-			s.status = Status{RequestedDelayMS: c.TargetDelayMS, ReceiverDelayMS: stats.ReceiverDelayMS, AudioFrames: stats.Frames, AcknowledgedFrame: stats.Acknowledged, Retransmits: stats.Retransmits, FeedbackReports: stats.Feedback, SinkMuted: native.Muted, SinkVolume: native.VolumePercent(), PlaybackSeconds: ms.CurrentTime, State: "streaming", Message: "Select ShoutOut as the audio output. Receiver latency has not been measured.", Sink: audio.SinkName, Device: c.DeviceName, PlayerState: ms.PlayerState, ReceiverVolume: rs.Volume.Level, ReceiverMuted: rs.Volume.Muted, EncodedBytes: stream.Bytes.Load(), MediaRequests: stream.Requests.Load(), Subscribers: stream.Subscribers(), Peak: math.Float64frombits(stream.Peak.Load()), Updated: time.Now()}
+			s.status = Status{RequestedDelayMS: c.TargetDelayMS, ReceiverDelayMS: stats.ReceiverDelayMS, AudioFrames: stats.Frames, AcknowledgedFrame: stats.Acknowledged, Retransmits: stats.Retransmits, FeedbackReports: stats.Feedback, SinkMuted: native.Muted, SinkVolume: native.VolumePercent(), PlaybackSeconds: ms.CurrentTime, State: "streaming", Message: "Select Omashoutout as the audio output. Receiver latency has not been measured.", Sink: audio.SinkName, Device: c.DeviceName, PlayerState: ms.PlayerState, ReceiverVolume: rs.Volume.Level, ReceiverMuted: rs.Volume.Muted, EncodedBytes: stream.Bytes.Load(), MediaRequests: stream.Requests.Load(), Subscribers: stream.Subscribers(), Peak: math.Float64frombits(stream.Peak.Load()), Updated: time.Now()}
 			s.mu.Unlock()
 			if ms.PlayerState == "IDLE" {
 				return fmt.Errorf("receiver stopped audio: %s", ms.IdleReason)

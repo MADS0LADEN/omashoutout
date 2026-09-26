@@ -2,7 +2,7 @@
 
 ## Requirements
 
-The **daemon** is the same on Omarchy and KDE: a PipeWire null sink named `shoutout` (description ShoutOut). Desktop volume and mute apply to that sink. Capture stays a virtual node and must not appear as an application in the mixer.
+The **daemon** is the same on Omarchy and KDE: a PipeWire null sink named `omashoutout` (description Omashoutout). Desktop volume and mute apply to that sink. Capture stays a virtual node and must not appear as an application in the mixer.
 
 ### Omarchy
 
@@ -22,37 +22,37 @@ For Arch Linux, the [PKGBUILD](ARCH.md) installs system-wide, including the nati
 
 ```sh
 make build
-./build/shoutout doctor
-./build/shoutout setup --device "Your speaker name"
-./build/shoutout install
-shoutout configure
+./build/omashoutout doctor
+./build/omashoutout setup --device "Your speaker name"
+./build/omashoutout install
+omashoutout configure
 ```
 
-`shoutout install` copies the binary to `~/.local/bin/shoutout`, installs the user systemd service, and copies the Omarchy plugin to `~/.config/omarchy/plugins/io.github.lkarlslund.shoutout/`, enabling it on the right side of the shell bar. It does not require the KDE module.
+`omashoutout install` copies the binary to `~/.local/bin/omashoutout`, installs the user systemd service, and copies the Omarchy plugin to `~/.config/omarchy/plugins/io.github.MADS0LADEN.omashoutout/`, enabling it on the right side of the shell bar. It does not require the KDE module.
 
 ### KDE (per-user)
 
 ```sh
 make build kde
-./build/shoutout doctor
-./build/shoutout setup --device "Your speaker name"
-./build/shoutout install
-shoutout configure
+./build/omashoutout doctor
+./build/omashoutout setup --device "Your speaker name"
+./build/omashoutout install
+omashoutout configure
 ```
 
-The per-user KDE installer also copies the native settings module, desktop launcher and Plasma environment script, then enables the systemd user service. It preserves the selected output and existing ShoutOut volume/mute. A newly created output starts muted at a default receiver scale of 1%.
+The per-user KDE installer also copies the native settings module, desktop launcher and Plasma environment script, then enables the systemd user service. It preserves the selected output and existing Omashoutout volume/mute. A newly created output starts muted at a default receiver scale of 1%.
 
 ### Configure
 
-`shoutout configure` opens the Omarchy settings panel via `omarchy-shell io.github.lkarlslund.shoutout open` when `omarchy-shell` is on PATH. Otherwise it opens the ShoutOut module inside KDE System Settings. The Omarchy panel is the intended Omarchy settings surface; playback still depends on the same daemon. Hardware validation recorded in the docs was on KDE Plasma — the Omarchy panel has not been hardware-tested.
+`omashoutout configure` opens the Omarchy settings panel via `omarchy-shell io.github.MADS0LADEN.omashoutout open` when `omarchy-shell` is on PATH. Otherwise it opens the Omashoutout module inside KDE System Settings. The Omarchy panel is the intended Omarchy settings surface; playback still depends on the same daemon. Hardware validation recorded in the docs was on KDE Plasma — the Omarchy panel has not been hardware-tested.
 
 On KDE, the regular System Settings launcher discovers the per-user plugin after the next Plasma login. Close an already open System Settings window before using the new launcher. A system package can install the plugin into the standard Qt6 plugin directory; the Go-only CI artifacts do not include the native KDE module.
 
 ## Use
 
-Choose a detected receiver or enter `address:port` (for example `192.168.1.10:8009`). The service discovers receivers continuously from startup and pushes live changes to the settings dropdown. Devices disappear after 45 seconds without refreshed discovery records, or earlier when they announce departure. Your selected destination is retained if it becomes unavailable. One destination is supported at a time; advertised speaker groups can be selected but have not been validated. Select the **ShoutOut** output and unmute it in the Omarchy Audio panel or in KDE's audio controls, then route your applications normally.
+Choose a detected receiver or enter `address:port` (for example `192.168.1.10:8009`). The service discovers receivers continuously from startup and pushes live changes to the settings dropdown. Devices disappear after 45 seconds without refreshed discovery records, or earlier when they announce departure. Your selected destination is retained if it becomes unavailable. One destination is supported at a time; advertised speaker groups can be selected but have not been validated. Select the **Omashoutout** output and unmute it in the Omarchy Audio panel or in KDE's audio controls, then route your applications normally.
 
-- The desktop output slider and mute for ShoutOut are authoritative. Internal capture is marked virtual so it does not appear as an application in the mixer.
+- The desktop output slider and mute for Omashoutout are authoritative. Internal capture is marked virtual so it does not appear as an application in the mixer.
 - Receiver volume scale is configurable from **0–100%**. Keep it low for sensitive speakers. The 5% maximum applies only to development speaker tests.
 - Native volume changes apply to captured audio, so their audible effect includes stream delay. Native mute also sends a receiver mute command without restarting playback.
 - Encoding choices are **Cast Streaming / Opus (experimental)** and AAC live segments. Existing MP3 configurations remain supported as a legacy option. Cast Streaming sends encrypted, paced Opus frames (5 ms below a 40 ms target, 10 ms below 80 ms, otherwise 20 ms) over UDP, with receiver feedback and bounded retransmission. Its target-delay control accepts 10–1000 ms; the Balanced target is 100 ms. This is a requested receiver buffer, not measured end-to-end latency. Select AAC manually if the receiver does not support this mode.
@@ -67,17 +67,17 @@ Settings use a private Unix socket in `$XDG_RUNTIME_DIR`, with no browser interf
 ## Manage and develop
 
 ```sh
-shoutout configure
-shoutout status
-shoutout devices
-journalctl --user -u shoutout
-systemctl --user restart shoutout
-shoutout uninstall
+omashoutout configure
+omashoutout status
+omashoutout devices
+journalctl --user -u omashoutout
+systemctl --user restart omashoutout
+omashoutout uninstall
 make test
 ```
 
-Configuration is stored in `$XDG_CONFIG_HOME/shoutout/config.json`, normally `~/.config/shoutout/config.json`. `setup` is intended before starting the service; use native settings or `shoutout config` / `shoutout apply` while running.
+Configuration is stored in `$XDG_CONFIG_HOME/omashoutout/config.json`, normally `~/.config/omashoutout/config.json`. `setup` is intended before starting the service; use native settings or `omashoutout config` / `omashoutout apply` while running.
 
-`shoutout uninstall` stops the user service, removes the sink, the binary, the desktop entry, and the Omarchy plugin when present. Personal settings in `~/.config/shoutout/config.json` stay. On KDE, restart Plasma after uninstall to clear an inherited plugin search path from a per-user module install.
+`omashoutout uninstall` stops the user service, removes the sink, the binary, the desktop entry, and the Omarchy plugin when present. Personal settings in `~/.config/omashoutout/config.json` stay. On KDE, restart Plasma after uninstall to clear an inherited plugin search path from a per-user module install.
 
 Tests use synthetic PCM and protocol simulations without emitting audio. Agent-run speaker tests must begin muted at 1%, verify receiver status, and never exceed 5%. See [validation](VALIDATION.md) and the [plan](PLAN.md).

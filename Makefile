@@ -3,7 +3,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty)
 
 build:
-	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o build/shoutout ./cmd/shoutout
+	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o build/omashoutout ./cmd/omashoutout
 
 kde:
 	cmake -S kde -B build/kde -G Ninja
@@ -14,10 +14,10 @@ test:
 	go vet ./...
 
 install: build
-	./build/shoutout install
+	./build/omashoutout install
 
 uninstall:
-	shoutout uninstall
+	omashoutout uninstall
 
 MAKEPKG_FLAGS ?= -s
 

@@ -1,32 +1,32 @@
 # Run service actions in existing user managers, never in the root audio session.
-_shoutout_users() {
+_omashoutout_users() {
   local action=$1 uid user rest
   loginctl list-users --no-legend --no-pager 2>/dev/null |
     while read -r uid user rest; do
       case "$uid" in ''|0|*[!0-9]*) continue ;; esac
       if ! systemctl --user --machine="${user}@.host" daemon-reload; then
-        printf 'ShoutOut: could not reach the user service manager for %s; startup will be retried at next login.\n' "$user" >&2
+        printf 'Omashoutout: could not reach the user service manager for %s; startup will be retried at next login.\n' "$user" >&2
         continue
       fi
       if [ "$action" != reload ]; then
-        systemctl --user --machine="${user}@.host" "$action" shoutout.service ||
-          printf 'ShoutOut: could not %s the service for %s.\n' "$action" "$user" >&2
+        systemctl --user --machine="${user}@.host" "$action" omashoutout.service ||
+          printf 'Omashoutout: could not %s the service for %s.\n' "$action" "$user" >&2
       fi
     done
 }
 
 post_install() {
-  _shoutout_users start
+  _omashoutout_users start
 }
 
 post_upgrade() {
-  _shoutout_users try-restart
+  _omashoutout_users try-restart
 }
 
 pre_remove() {
-  _shoutout_users stop
+  _omashoutout_users stop
 }
 
 post_remove() {
-  _shoutout_users reload
+  _omashoutout_users reload
 }

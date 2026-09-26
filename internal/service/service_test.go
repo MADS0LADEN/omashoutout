@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/lkarlslund/shoutout/internal/config"
+	"github.com/MADS0LADEN/omashoutout/internal/config"
 )
 
 func TestNoIndependentMute(t *testing.T) {

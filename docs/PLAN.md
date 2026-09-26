@@ -2,11 +2,11 @@
 
 ## Implemented architecture
 
-The Go service owns discovery, Cast session control, persistence and supervision. Settings are exposed through the Omarchy shell bar plugin or the Qt6/KDE Frameworks System Settings module; both talk to the service over the same private Unix socket. The audio device itself uses the desktop's PipeWire session (native gain and mute on the ShoutOut sink).
+The Go service owns discovery, Cast session control, persistence and supervision. Settings are exposed through the Omarchy shell bar plugin or the Qt6/KDE Frameworks System Settings module; both talk to the service over the same private Unix socket. The audio device itself uses the desktop's PipeWire session (native gain and mute on the Omashoutout sink).
 
 ```mermaid
 flowchart LR
-    Applications --> Sink[ShoutOut output: native gain and mute]
+    Applications --> Sink[Omashoutout output: native gain and mute]
     Sink --> Capture[Virtual monitor capture]
     Capture --> PCM[Float PCM mute, fade-in and peak bound]
     PCM --> Encoder[FFmpeg Opus, AAC or MP3]
@@ -25,7 +25,7 @@ AAC live delivery uses a sliding six-segment playlist, bounded retained files, t
 
 A background discovery worker maintains expiring device records and publishes snapshots over a persistent private socket subscription. Each settings client updates its destination list without replacing unsaved settings; reconnects use the same discovery cache.
 
-The native settings UIs (Omarchy plugin and KDE module) configure destination discovery/manual `address:port`, full-range receiver volume scale, encoding, bitrate, segment duration, presets and enablement. They show connection status and native mute/volume on the ShoutOut sink. Volume scale applies live; no-op and inactive transport settings do not reconnect. Active transport changes restart the session. Numeric inputs and sliders stay synchronized. Settings travel through a mode-0600 Unix socket. There is no web settings UI.
+The native settings UIs (Omarchy plugin and KDE module) configure destination discovery/manual `address:port`, full-range receiver volume scale, encoding, bitrate, segment duration, presets and enablement. They show connection status and native mute/volume on the Omashoutout sink. Volume scale applies live; no-op and inactive transport settings do not reconnect. Active transport changes restart the session. Numeric inputs and sliders stay synchronized. Settings travel through a mode-0600 Unix socket. There is no web settings UI.
 
 ## Remaining milestones
 

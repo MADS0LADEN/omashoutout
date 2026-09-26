@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lkarlslund/shoutout/internal/config"
+	"github.com/MADS0LADEN/omashoutout/internal/config"
 )
 
 func TestDecodeSingleJSONObject(t *testing.T) {

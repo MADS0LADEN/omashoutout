@@ -191,7 +191,7 @@ function statusLine(status) {
 }
 
 function offlineStatusMessage() {
-  return "ShoutOut is not running. Run shoutout install or systemctl --user start shoutout."
+  return "Omashoutout is not running. Run omashoutout install or systemctl --user start omashoutout."
 }
 
 function encodingOptions(showMp3) {

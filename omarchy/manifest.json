@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "id": "io.github.lkarlslund.shoutout",
-  "name": "ShoutOut",
+  "id": "io.github.MADS0LADEN.omashoutout",
+  "name": "Omashoutout",
   "version": "1.0.0",
-  "author": "lkarlslund",
+  "author": "MADS0LADEN",
   "license": "MIT",
-  "description": "Configure ShoutOut Cast streaming: destination, receiver volume scale, presets, and encoding from the Omarchy bar.",
+  "description": "Configure Omashoutout Cast streaming: destination, receiver volume scale, presets, and encoding from the Omarchy bar.",
   "kinds": [
     "bar-widget"
   ],
@@ -13,8 +13,8 @@
     "barWidget": "Panel.qml"
   },
   "barWidget": {
-    "displayName": "ShoutOut",
-    "description": "ShoutOut receiver, volume scale, and streaming settings",
+    "displayName": "Omashoutout",
+    "description": "Omashoutout receiver, volume scale, and streaming settings",
     "category": "Audio",
     "allowMultiple": false,
     "defaultSection": "right"

@@ -1,0 +1,12 @@
+{
+ "KPlugin": {
+  "Name": "Omashoutout",
+  "Description": "Configure the receiver, volume scale and playback format of the Omashoutout audio device",
+  "Icon": "audio-speakers",
+  "Version": "0.1.0",
+  "License": "MIT"
+ },
+ "X-KDE-System-Settings-Parent-Category": "input-devices",
+ "X-KDE-Keywords": "audio,sound,speaker,cast,omashoutout,volume",
+ "X-KDE-Weight": 201
+}

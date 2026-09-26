@@ -9,8 +9,8 @@ import (
 	"os/exec"
 	"strconv"
 
-	"github.com/lkarlslund/shoutout/internal/cast"
-	"github.com/lkarlslund/shoutout/internal/config"
+	"github.com/MADS0LADEN/omashoutout/internal/cast"
+	"github.com/MADS0LADEN/omashoutout/internal/config"
 )
 
 const realtimeCaptureLatencyMS = 5
@@ -38,7 +38,7 @@ func NewRealtime(parent context.Context, c config.Config, localIP, remoteIP stri
 			}
 		}
 	}()
-	s.capture = exec.CommandContext(ctx, "parec", "--device="+SinkName+".monitor", "--format=float32le", "--rate=48000", "--channels=2", "--latency-msec="+strconv.Itoa(realtimeCaptureLatencyMS), "--property=application.name=ShoutOut", "--property=node.dont-reconnect=true", "--property=node.virtual=true", "--property=media.role=filter")
+	s.capture = exec.CommandContext(ctx, "parec", "--device="+SinkName+".monitor", "--format=float32le", "--rate=48000", "--channels=2", "--latency-msec="+strconv.Itoa(realtimeCaptureLatencyMS), "--property=application.name=Omashoutout", "--property=node.dont-reconnect=true", "--property=node.virtual=true", "--property=media.role=filter")
 	captured, err := s.capture.StdoutPipe()
 	if err != nil {
 		return nil, err

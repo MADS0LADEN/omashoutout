@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lkarlslund/shoutout/internal/config"
+	"github.com/MADS0LADEN/omashoutout/internal/config"
 )
 
 // Synthetic silence bypasses the desktop audio server and never contacts a receiver.

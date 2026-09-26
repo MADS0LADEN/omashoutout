@@ -39,7 +39,7 @@ func InstallDir(dir string) error {
 }
 
 func writeFile(path string, data []byte, mode os.FileMode) error {
-	f, err := os.CreateTemp(filepath.Dir(path), ".shoutout-*")
+	f, err := os.CreateTemp(filepath.Dir(path), ".omashoutout-*")
 	if err != nil {
 		return err
 	}

@@ -20,8 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lkarlslund/shoutout/internal/cast"
-	"github.com/lkarlslund/shoutout/internal/config"
+	"github.com/MADS0LADEN/omashoutout/internal/cast"
+	"github.com/MADS0LADEN/omashoutout/internal/config"
 )
 
 // Capture batching and the compatibility stream queue are implementation
@@ -128,7 +128,7 @@ func NewStream(parent context.Context, c config.Config, localIP, receiverIP stri
 		}
 	})
 	if c.Codec == "aac-hls" {
-		s.directory, err = os.MkdirTemp(os.Getenv("XDG_RUNTIME_DIR"), "shoutout-stream-")
+		s.directory, err = os.MkdirTemp(os.Getenv("XDG_RUNTIME_DIR"), "omashoutout-stream-")
 		if err != nil {
 			listener.Close()
 			cancel()
@@ -177,7 +177,7 @@ func NewStream(parent context.Context, c config.Config, localIP, receiverIP stri
 		})
 	}
 	s.server = &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second}
-	s.capture = exec.CommandContext(ctx, "parec", "--device="+SinkName+".monitor", "--format=float32le", "--rate=48000", "--channels=2", "--latency-msec="+strconv.Itoa(captureLatencyMS), "--property=application.name=ShoutOut", "--property=node.dont-reconnect=true", "--property=node.virtual=true", "--property=media.role=filter")
+	s.capture = exec.CommandContext(ctx, "parec", "--device="+SinkName+".monitor", "--format=float32le", "--rate=48000", "--channels=2", "--latency-msec="+strconv.Itoa(captureLatencyMS), "--property=application.name=Omashoutout", "--property=node.dont-reconnect=true", "--property=node.virtual=true", "--property=media.role=filter")
 	captured, err := s.capture.StdoutPipe()
 	if err != nil {
 		listener.Close()

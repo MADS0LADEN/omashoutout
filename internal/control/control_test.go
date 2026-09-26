@@ -3,15 +3,15 @@ package control
 import (
 	"context"
 	"encoding/json"
-	"github.com/lkarlslund/shoutout/internal/discovery"
+	"github.com/MADS0LADEN/omashoutout/internal/discovery"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/lkarlslund/shoutout/internal/config"
-	"github.com/lkarlslund/shoutout/internal/service"
+	"github.com/MADS0LADEN/omashoutout/internal/config"
+	"github.com/MADS0LADEN/omashoutout/internal/service"
 )
 
 func TestPrivateSocketConfiguration(t *testing.T) {

@@ -21,16 +21,16 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
-class ShoutoutKCM : public KCModule {
+class OmashoutoutKCM : public KCModule {
   Q_OBJECT
 public:
-  ShoutoutKCM(QObject *parent, const KPluginMetaData &data)
+  OmashoutoutKCM(QObject *parent, const KPluginMetaData &data)
       : KCModule(parent, data) {
     setButtons(Apply | Default);
     auto layout = new QVBoxLayout(widget());
     auto description = new QLabel(
         tr("Use KDE’s normal Audio output controls for volume and mute. These "
-           "settings configure where the ShoutOut device sends audio."),
+           "settings configure where the Omashoutout device sends audio."),
         widget());
     description->setWordWrap(true);
     layout->addWidget(description);
@@ -173,7 +173,7 @@ public:
     });
     timer = new QTimer(this);
     timer->setInterval(2000);
-    connect(timer, &QTimer::timeout, this, &ShoutoutKCM::refreshStatus);
+    connect(timer, &QTimer::timeout, this, &OmashoutoutKCM::refreshStatus);
     timer->start();
     deviceSocket = new QLocalSocket(this);
     connect(deviceSocket, &QLocalSocket::connected, this, [this] {
@@ -192,7 +192,7 @@ public:
       liveDevices = {};
       updateDevices();
     });
-    connect(timer, &QTimer::timeout, this, &ShoutoutKCM::subscribeDevices);
+    connect(timer, &QTimer::timeout, this, &OmashoutoutKCM::subscribeDevices);
     subscribeDevices();
   }
   void load() override {
@@ -302,10 +302,10 @@ private:
   QTimer *timer;
   bool loading = false, statusBusy = false;
   QString executable() const {
-    QString local = QDir::homePath() + "/.local/bin/shoutout";
+    QString local = QDir::homePath() + "/.local/bin/omashoutout";
     return QFileInfo::exists(local)
                ? local
-               : QStandardPaths::findExecutable("shoutout");
+               : QStandardPaths::findExecutable("omashoutout");
   }
   void run(const QStringList &args, const QByteArray &input,
            std::function<void(QByteArray)> success) {
@@ -365,7 +365,7 @@ private:
     if (deviceSocket->state() == QLocalSocket::UnconnectedState)
       deviceSocket->connectToServer(
           QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation) +
-          "/shoutout.sock");
+          "/omashoutout.sock");
   }
   void updateDevices() {
     QSignalBlocker blocker(devices);
@@ -426,5 +426,5 @@ private:
     });
   }
 };
-K_PLUGIN_CLASS_WITH_JSON(ShoutoutKCM, "kcm_shoutout.json")
+K_PLUGIN_CLASS_WITH_JSON(OmashoutoutKCM, "kcm_omashoutout.json")
 #include "kcm.moc"

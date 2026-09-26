@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const SinkName = "shoutout"
+const SinkName = "omashoutout"
 
 type Sink struct{ module string }
 type SinkState struct {
@@ -54,7 +54,7 @@ func ReadSink(ctx context.Context) (SinkState, error) {
 			return s, nil
 		}
 	}
-	return SinkState{}, errors.New("ShoutOut output is unavailable")
+	return SinkState{}, errors.New("Omashoutout output is unavailable")
 }
 func SetMuted(ctx context.Context, muted bool) error {
 	_, err := pactl(ctx, "set-sink-mute", SinkName, strconv.FormatBool(muted))
@@ -74,11 +74,11 @@ func NewSink(ctx context.Context) (*Sink, error) {
 		return nil, err
 	}
 	for _, m := range modules {
-		if m.Name == "module-null-sink" && strings.Contains(m.Argument, "shoutout.owner=shoutout") {
+		if m.Name == "module-null-sink" && strings.Contains(m.Argument, "omashoutout.owner=omashoutout") {
 			return &Sink{module: strconv.Itoa(m.Index)}, nil
 		}
 	}
-	b, err = pactl(ctx, "load-module", "module-null-sink", "sink_name="+SinkName, "rate=48000", "channels=2", "format=float32le", `sink_properties=device.description="ShoutOut" device.icon_name="audio-speakers" shoutout.owner=shoutout priority.session=1`)
+	b, err = pactl(ctx, "load-module", "module-null-sink", "sink_name="+SinkName, "rate=48000", "channels=2", "format=float32le", `sink_properties=device.description="Omashoutout" device.icon_name="audio-speakers" omashoutout.owner=omashoutout priority.session=1`)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func RemoveSink(ctx context.Context) error {
 		return err
 	}
 	for _, m := range modules {
-		if m.Name == "module-null-sink" && strings.Contains(m.Argument, "shoutout.owner=shoutout") {
+		if m.Name == "module-null-sink" && strings.Contains(m.Argument, "omashoutout.owner=omashoutout") {
 			if _, err = pactl(ctx, "unload-module", strconv.Itoa(m.Index)); err != nil {
 				return err
 			}

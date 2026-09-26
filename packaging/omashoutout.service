@@ -1,11 +1,11 @@
 [Unit]
-Description=ShoutOut virtual audio output
+Description=Omashoutout virtual audio output
 After=pipewire-pulse.service
 StartLimitIntervalSec=60
 StartLimitBurst=5
 
 [Service]
-ExecStart=/usr/bin/shoutout run
+ExecStart=/usr/bin/omashoutout run
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=10

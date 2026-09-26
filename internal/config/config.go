@@ -83,7 +83,7 @@ func Path() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(d, "shoutout", "config.json"), nil
+	return filepath.Join(d, "omashoutout", "config.json"), nil
 }
 func Load(path string) (Config, error) {
 	c := Default()
