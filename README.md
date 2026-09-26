@@ -26,7 +26,6 @@ On Arch Linux, use the [system-wide package](packaging/arch/README.md):
 ```sh
 cd packaging/arch
 makepkg -si
-systemctl --user enable --now shoutout.service
 shoutout configure
 ```
 

@@ -7,7 +7,6 @@ sudo pacman -S --needed base-devel git
 git clone https://github.com/lkarlslund/shoutout.git
 cd shoutout/packaging/arch
 makepkg -si
-systemctl --user enable --now shoutout.service
 shoutout configure
 ```
 
@@ -18,11 +17,13 @@ The package is named `shoutout-git`. It installs:
 - `/usr/lib/systemd/user/shoutout.service`
 - A desktop launcher, documentation and license notices under `/usr/share/`
 
-All users can access the installed program and settings page. Each user enables
-their own service and chooses their destination. Audio runs in that user's
-PipeWire session, not as a root daemon. The package does not start playback or
-modify anyone's home directory during installation. The system-installed KDE
-module needs no per-user plugin-path setup; reopen System Settings after install.
+Installation enables ShoutOut for user sessions and starts it immediately for
+logged-in users. Future sessions start it automatically. Audio runs as each
+user, with their own settings and PipeWire session. Open ShoutOut in System
+Settings and choose your speaker; no service setup or reboot is needed.
+
+The native module is installed in KDE's standard plugin directory. Reopen System
+Settings if it was already open during installation.
 
 Choose a destination and unmute ShoutOut in KDE's output selector. Do not run
 `shoutout install` for a package installation; that command installs a separate
@@ -34,6 +35,6 @@ copy in your home directory.
 race tests and vet; these use simulated receivers and do not play speaker audio.
 This recipe tracks Git `main`; it has not been submitted to the AUR.
 
-To remove it, first run `systemctl --user disable --now shoutout.service`, then
-`sudo pacman -Rns shoutout-git`. Personal settings remain. An existing virtual
+Remove it with `sudo pacman -Rns shoutout-git`; the package stops its running
+user services and removes automatic startup. Personal settings remain. An existing virtual
 output disappears when the audio session ends.

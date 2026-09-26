@@ -1,11 +1,12 @@
 # Maintainer: Lars Karlslund
 pkgname=shoutout-git
 pkgver=0.1.0.r15.ga597e3d
-pkgrel=1
+pkgrel=2
 pkgdesc='Use your Google Audio compatible speakers for system audio, with native KDE settings'
 arch=('x86_64')
 url='https://github.com/lkarlslund/shoutout'
 license=('MIT')
+install=shoutout.install
 depends=('ffmpeg' 'libpulse' 'pipewire-pulse' 'qt6-base' 'kcmutils'
          'kcoreaddons' 'systemsettings' 'systemd' 'glibc' 'gcc-libs')
 makedepends=('git' 'go>=1.26' 'cmake' 'ninja')
@@ -45,6 +46,8 @@ package() {
   install -Dm755 bin/shoutout "$pkgdir/usr/bin/shoutout"
   DESTDIR="$pkgdir" cmake --install build/kde
   install -Dm644 packaging/shoutout.service "$pkgdir/usr/lib/systemd/user/shoutout.service"
+  install -d "$pkgdir/usr/lib/systemd/user/default.target.wants"
+  ln -s ../shoutout.service "$pkgdir/usr/lib/systemd/user/default.target.wants/shoutout.service"
   install -Dm644 packaging/shoutout.desktop "$pkgdir/usr/share/applications/shoutout.desktop"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 licenses/*.txt -t "$pkgdir/usr/share/licenses/$pkgname/"
